@@ -931,7 +931,14 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
     const etaMinutes = estimateMinutes(route.distanceKm);
     const routeStops = formatRouteStops(route.order, clients);
     const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
-    const whatsappMessage = buildWhatsAppMessage(route, idx, googleMapsLinks);
+    const whatsappMessage = buildWhatsAppMessage(
+      route,
+      idx,
+      googleMapsLinks,
+      clients,
+      depot,
+      returnToDepot,
+    );
     const whatsappShareUrl = createWhatsAppShareUrl(whatsappMessage);
     const title = idx === 0 ? "Recorrido #1 (Más óptimo)" : `Recorrido #${idx + 1}`;
     const distanceLabel = depot
@@ -1075,11 +1082,17 @@ function createWhatsAppShareUrl(message) {
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
-function buildWhatsAppMessage(route, routeIndex, googleMapsLinks) {
+function buildWhatsAppMessage(route, routeIndex, googleMapsLinks, clients, depot, returnToDepot) {
+  const stops = buildRouteStopsForExport(route, clients, depot, returnToDepot);
   const lines = [
     `Bambú - Recorrido #${routeIndex + 1}`,
     `Paradas: ${route.order.length}`,
     `Distancia estimada: ${route.distanceKm.toFixed(2)} km`,
+    "",
+    "Orden de visita (seguir este orden):",
+    ...stops.map((stop, idx) => `${idx + 1}) ${stop.label} - ${stop.name}`),
+    "",
+    "Referencia: en Google Maps pueden verse direcciones; usar el orden de arriba.",
     "",
     "Navegación Google Maps:",
   ];
@@ -1139,7 +1152,14 @@ async function copyWhatsAppMessage(routeIndex) {
   }
 
   const links = createGoogleMapsLinks(route.order, state.run.clients, state.run.depot, state.run.returnToDepot);
-  const message = buildWhatsAppMessage(route, routeIndex, links);
+  const message = buildWhatsAppMessage(
+    route,
+    routeIndex,
+    links,
+    state.run.clients,
+    state.run.depot,
+    state.run.returnToDepot,
+  );
   await copyTextToClipboard(message, "Mensaje para WhatsApp copiado.");
 }
 
