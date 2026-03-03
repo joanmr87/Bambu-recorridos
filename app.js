@@ -41,7 +41,7 @@ init();
 
 function init() {
   initMap();
-  clientsInput.value = DEMO_DATA;
+  clientsInput.value = "";
   depotLatInput.value = String(DEFAULT_DEPOT.lat);
   depotLngInput.value = String(DEFAULT_DEPOT.lng);
 
@@ -66,7 +66,7 @@ function init() {
     selectRoute(index);
   });
 
-  runOptimization();
+  setStatus('Pegá coordenadas y presioná "Calcular 3 recorridos óptimos".', "ok");
 }
 
 function initMap() {
