@@ -88,6 +88,17 @@ function init() {
       return;
     }
 
+    const exportButton = event.target.closest("[data-export-route-index]");
+    if (exportButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      exportRouteForMyMaps(
+        Number(exportButton.dataset.exportRouteIndex),
+        exportButton.dataset.exportFormat || "csv",
+      );
+      return;
+    }
+
     if (event.target.closest("a,button")) {
       return;
     }
@@ -966,6 +977,14 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
             Abrir WhatsApp con mensaje
           </a>
         </div>
+        <div class="gmaps-row">
+          <button class="copy-link-btn" type="button" data-export-route-index="${idx}" data-export-format="csv">
+            Exportar CSV My Maps
+          </button>
+          <button class="copy-link-btn" type="button" data-export-route-index="${idx}" data-export-format="kml">
+            Exportar KML My Maps
+          </button>
+        </div>
       </div>
     `;
 
@@ -1122,6 +1141,168 @@ async function copyWhatsAppMessage(routeIndex) {
   const links = createGoogleMapsLinks(route.order, state.run.clients, state.run.depot, state.run.returnToDepot);
   const message = buildWhatsAppMessage(route, routeIndex, links);
   await copyTextToClipboard(message, "Mensaje para WhatsApp copiado.");
+}
+
+function exportRouteForMyMaps(routeIndex, format) {
+  if (!state.run) {
+    return;
+  }
+
+  const route = state.run.rankedRoutes[routeIndex];
+  if (!route) {
+    return;
+  }
+
+  const stops = buildRouteStopsForExport(route, state.run.clients, state.run.depot, state.run.returnToDepot);
+  if (stops.length === 0) {
+    setStatus("No hay paradas para exportar.", "warn");
+    return;
+  }
+
+  const safeFormat = format === "kml" ? "kml" : "csv";
+  const routeName = `Recorrido ${routeIndex + 1}`;
+  const fileBase = `bambu-ruta-${routeIndex + 1}-${Date.now()}`;
+
+  if (safeFormat === "csv") {
+    const csvContent = buildMyMapsCsv(stops, routeName);
+    downloadTextFile(`${fileBase}.csv`, csvContent, "text/csv;charset=utf-8;");
+    setStatus("CSV para Google My Maps descargado.", "ok");
+    return;
+  }
+
+  const kmlContent = buildMyMapsKml(stops, routeName);
+  downloadTextFile(`${fileBase}.kml`, kmlContent, "application/vnd.google-earth.kml+xml;charset=utf-8;");
+  setStatus("KML para Google My Maps descargado.", "ok");
+}
+
+function buildRouteStopsForExport(route, clients, depot, returnToDepot) {
+  const stops = [];
+
+  if (depot) {
+    stops.push({
+      label: toAlphaLabel(stops.length),
+      name: "Depósito (inicio)",
+      lat: depot.lat,
+      lng: depot.lng,
+    });
+  }
+
+  route.order.forEach((clientIndex) => {
+    const client = clients[clientIndex];
+    stops.push({
+      label: toAlphaLabel(stops.length),
+      name: client.name,
+      lat: client.lat,
+      lng: client.lng,
+    });
+  });
+
+  if (depot && returnToDepot) {
+    stops.push({
+      label: toAlphaLabel(stops.length),
+      name: "Depósito (regreso)",
+      lat: depot.lat,
+      lng: depot.lng,
+    });
+  }
+
+  return stops;
+}
+
+function buildMyMapsCsv(stops, routeName) {
+  const header = "Name,Description,Latitude,Longitude,Address,Order";
+  const rows = stops.map((stop, idx) => {
+    const name = stop.label;
+    const desc = `${routeName} - ${stop.name}`;
+    return [
+      csvEscape(name),
+      csvEscape(desc),
+      stop.lat.toFixed(6),
+      stop.lng.toFixed(6),
+      csvEscape(stop.name),
+      String(idx + 1),
+    ].join(",");
+  });
+
+  return [header, ...rows].join("\n");
+}
+
+function buildMyMapsKml(stops, routeName) {
+  const placemarks = stops
+    .map((stop, idx) => {
+      const name = xmlEscape(stop.label);
+      const description = xmlEscape(`${routeName} - ${stop.name}`);
+      return `
+    <Placemark>
+      <name>${name}</name>
+      <description>${description}</description>
+      <Point><coordinates>${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0</coordinates></Point>
+    </Placemark>`;
+    })
+    .join("");
+
+  const lineCoordinates = stops
+    .map((stop) => `${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0`)
+    .join(" ");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${xmlEscape(routeName)}</name>
+    <Style id="routeLine">
+      <LineStyle>
+        <color>ffed6a25</color>
+        <width>4</width>
+      </LineStyle>
+    </Style>
+    ${placemarks}
+    <Placemark>
+      <name>${xmlEscape(routeName)}</name>
+      <styleUrl>#routeLine</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>${lineCoordinates}</coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>`;
+}
+
+function downloadTextFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function xmlEscape(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function toAlphaLabel(index) {
+  let n = index + 1;
+  let label = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    n = Math.floor((n - 1) / 26);
+  }
+  return label;
 }
 
 async function copyTextToClipboard(text, successMessage) {
