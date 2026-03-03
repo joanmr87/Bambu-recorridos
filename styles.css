@@ -111,6 +111,65 @@ textarea {
   gap: 0.65rem;
 }
 
+.sheet-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.sheet-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.9rem;
+}
+
+.suggestions {
+  margin-top: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.suggestion-item {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #eef2f7;
+  border-radius: 0;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: #f8fafc;
+}
+
+.suggestion-main {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.suggestion-sub {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.suggestion-empty {
+  padding: 0.65rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .checkbox {
   display: flex;
   align-items: center;
@@ -143,6 +202,54 @@ button:hover {
 button.ghost {
   background: #e5e7eb;
   color: #111827;
+}
+
+.selected-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.selected-empty {
+  padding: 0.65rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.selected-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.selected-item:last-child {
+  border-bottom: none;
+}
+
+.selected-main {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.selected-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.remove-selected-btn {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
 }
 
 .status {
@@ -323,5 +430,9 @@ button.ghost {
 
   #map {
     height: 420px;
+  }
+
+  .sheet-controls {
+    grid-template-columns: 1fr;
   }
 }

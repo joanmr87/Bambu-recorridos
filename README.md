@@ -1,10 +1,13 @@
 # Planificador de Recorridos Bambú
 
-Aplicación web para que administración cargue coordenadas de clientes, visualice puntos en mapa y obtenga **3 recorridos optimizados** ordenados por distancia estimada.
+Aplicación web para que administración busque clientes desde Google Sheets en vivo, los seleccione y obtenga **3 recorridos optimizados** ordenados por distancia estimada.
 
 ## Funcionalidades
 
-- Carga de clientes en texto (dirección + coordenadas o nombre,lat,lng).
+- Conexión en vivo a 2 Google Sheets de clientes (sin importar archivos manualmente).
+- Cache local de clientes por 5 minutos para acelerar carga.
+- Buscador por dirección con sugerencias en tiempo real.
+- Selección de clientes por clic y armado de recorrido solo con seleccionados.
 - Mapa interactivo con OpenStreetMap + Leaflet.
 - Depósito por defecto en Ingeniero Huergo (editable) y retorno al depósito.
 - Distancias reales de calle con OSRM (fallback automático a línea recta si no hay conexión).
@@ -28,9 +31,13 @@ python3 -m http.server 8080
 
 - [http://localhost:8080](http://localhost:8080)
 
+Nota: para probar el proxy de Sheets de Netlify en local, conviene usar `netlify dev`.
+
 ## Deploy en Netlify
 
 El proyecto ya está preparado con `netlify.toml` para deploy estático con fallback a `index.html`.
+También incluye proxy de los 2 Google Sheets para evitar problemas de CORS en navegador.
+Incluye botón de `Forzar actualización Sheets` para traer cambios inmediatos ignorando cache.
 
 ### Opción A: desde GitHub (recomendada)
 
@@ -52,17 +59,4 @@ netlify deploy --prod --dir .
 
 ## Formato de entrada admitido
 
-### Formato 1 (dos líneas por cliente)
-
-```text
-GREGORIO MARTINEZ 1615, NEUQUEN
--38.938063, -68.081729
-```
-
-### Formato 2 (una línea por cliente)
-
-```text
-Cliente Centro,-38.9516,-68.0591
-```
-
-También acepta separación por punto y coma o espacios.
+No hay carga manual de coordenadas. Los clientes se toman desde Google Sheets y se seleccionan desde el buscador.

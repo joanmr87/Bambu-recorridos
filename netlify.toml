@@ -2,6 +2,18 @@
   publish = "."
 
 [[redirects]]
+  from = "/data/sheet-1.csv"
+  to = "https://docs.google.com/spreadsheets/d/1-NyQPkbwJw19hOeLvGoc6Ob3amxfcePBXG_Bki39uq4/gviz/tq?tqx=out:csv"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/data/sheet-2.csv"
+  to = "https://docs.google.com/spreadsheets/d/1FfQGGBDODbQF9XVI5ylxGAYsSjhWF3WQ98W68xcSas4/gviz/tq?tqx=out:csv"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

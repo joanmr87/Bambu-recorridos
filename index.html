@@ -35,14 +35,25 @@
           </small>
         </div>
 
+        <div class="field-group" id="client-search-block">
+          <label for="client-search">Buscar cliente por dirección</label>
+          <input id="client-search" type="text" placeholder="Escribí calle, número o ciudad" autocomplete="off" />
+          <div id="client-suggestions" class="suggestions" hidden></div>
+          <small>Buscá por dirección y hacé clic para agregar al recorrido.</small>
+        </div>
+
+        <div class="sheet-controls">
+          <button id="reload-sheets" type="button" class="ghost">Forzar actualización Sheets</button>
+          <button id="clear-selected" type="button" class="ghost">Limpiar selección</button>
+        </div>
+
+        <div id="sheet-meta" class="sheet-meta">Sincronizando clientes...</div>
+
         <div class="field-group">
-          <label for="clients-input">Clientes</label>
-          <textarea
-            id="clients-input"
-            rows="14"
-            placeholder="Formato: Nombre, latitud, longitud&#10;Ej: Cliente Centro,-38.9516,-68.0591&#10;También acepta: latitud,longitud"
-          ></textarea>
-          <small>Una línea por cliente. Se aceptan coma, punto y coma o espacios.</small>
+          <label>Clientes seleccionados (<span id="selected-count">0</span>)</label>
+          <ul id="selected-clients-list" class="selected-list">
+            <li class="selected-empty">Todavía no seleccionaste clientes.</li>
+          </ul>
         </div>
 
         <div class="controls">
@@ -72,7 +83,7 @@
           <small>Tip: también podés hacer clic en una tarjeta para cambiar el orden mostrado.</small>
         </div>
         <div id="results-empty" class="results-empty">
-          Cargá coordenadas y presioná "Calcular 3 recorridos óptimos".
+          Seleccioná clientes desde el buscador y presioná "Calcular 3 recorridos óptimos".
         </div>
         <div id="results-list" class="results-list"></div>
       </section>
