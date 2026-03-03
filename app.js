@@ -75,19 +75,11 @@ function init() {
   });
 
   resultsListEl.addEventListener("click", (event) => {
-    const copyButton = event.target.closest("[data-copy-url]");
-    if (copyButton) {
+    const copyMapsButton = event.target.closest("[data-copy-maps-route-index]");
+    if (copyMapsButton) {
       event.preventDefault();
       event.stopPropagation();
-      copyLinkToClipboard(copyButton.dataset.copyUrl);
-      return;
-    }
-
-    const copyMessageButton = event.target.closest("[data-copy-route-index]");
-    if (copyMessageButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      copyWhatsAppMessage(Number(copyMessageButton.dataset.copyRouteIndex));
+      copyGoogleMapsRoute(Number(copyMapsButton.dataset.copyMapsRouteIndex));
       return;
     }
 
@@ -95,7 +87,7 @@ function init() {
     if (copyDriverUrlButton) {
       event.preventDefault();
       event.stopPropagation();
-      copyLinkToClipboard(copyDriverUrlButton.dataset.copyDriverUrl);
+      copyTextToClipboard(copyDriverUrlButton.dataset.copyDriverUrl, "URL modo chofer copiada.");
       return;
     }
 
@@ -948,8 +940,6 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
     const etaMinutes = estimateMinutes(route.distanceKm);
     const routeStops = formatRouteStops(route.order, clients);
     const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
-    const whatsappMessage = buildWhatsAppMessage(route, idx, googleMapsLinks);
-    const whatsappShareUrl = createWhatsAppShareUrl(whatsappMessage);
     const driverModeUrl = buildDriverModeUrl(route, idx, clients);
     const title = idx === 0 ? "Recorrido #1 (Más óptimo)" : `Recorrido #${idx + 1}`;
     const distanceLabel = depot
@@ -968,40 +958,20 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
       </ol>
       <div class="gmaps-block">
         <div class="gmaps-title">Navegación para repartidor</div>
-        ${googleMapsLinks
-          .map(
-            (segment) => `
-            <div class="gmaps-row">
-              <a class="gmaps-link" href="${escapeHtmlAttr(segment.url)}" target="_blank" rel="noopener noreferrer">
-                Abrir ${escapeHtml(segment.label)}
-              </a>
-              <button class="copy-link-btn" type="button" data-copy-url="${escapeHtmlAttr(segment.url)}">
-                Copiar ${escapeHtml(segment.label)}
-              </button>
-            </div>
-          `,
-          )
-          .join("")}
         ${
           googleMapsLinks.length > 1
-            ? `<small class="gmaps-note">Se generaron ${googleMapsLinks.length} tramos por límite de puntos de Google Maps.</small>`
+            ? `<small class="gmaps-note">Google Maps requiere ${googleMapsLinks.length} tramos para esta ruta. Se copiarán juntos en orden.</small>`
             : ""
         }
         <div class="gmaps-row">
-          <button class="copy-link-btn" type="button" data-copy-route-index="${idx}">
-            Copiar mensaje WhatsApp
+          <button class="copy-link-btn" type="button" data-copy-maps-route-index="${idx}">
+            Copiar ruta Google Maps
           </button>
-          <a class="gmaps-link" href="${escapeHtmlAttr(whatsappShareUrl)}" target="_blank" rel="noopener noreferrer">
-            Abrir WhatsApp con mensaje
-          </a>
         </div>
         <div class="gmaps-row">
           <button class="copy-link-btn" type="button" data-copy-driver-url="${escapeHtmlAttr(driverModeUrl)}">
             Copiar URL modo chofer
           </button>
-          <a class="gmaps-link" href="${escapeHtmlAttr(driverModeUrl)}" target="_blank" rel="noopener noreferrer">
-            Abrir mapa modo chofer
-          </a>
         </div>
         <div class="gmaps-row">
           <button class="copy-link-btn" type="button" data-export-route-index="${idx}" data-export-format="kml">
@@ -1094,10 +1064,6 @@ function createGoogleMapsLinks(order, clients, depot, returnToDepot) {
   }));
 }
 
-function createWhatsAppShareUrl(message) {
-  return `https://wa.me/?text=${encodeURIComponent(message)}`;
-}
-
 function buildDriverModeUrl(route, routeIndex, clients) {
   const orderedStops = route.order.map((clientIndex, stopIndex) => {
     const client = clients[clientIndex];
@@ -1119,33 +1085,6 @@ function buildDriverModeUrl(route, routeIndex, clients) {
   const encoded = encodeSharedPayload(payload);
   const baseUrl = `${window.location.origin}${window.location.pathname}`;
   return `${baseUrl}?driver=1&route=${encoded}`;
-}
-
-function buildWhatsAppMessage(route, routeIndex, googleMapsLinks) {
-  const lines = [
-    `Bambú - Recorrido #${routeIndex + 1}`,
-    `Paradas: ${route.order.length}`,
-    `Distancia estimada: ${route.distanceKm.toFixed(2)} km`,
-    "",
-    "Navegación Google Maps:",
-  ];
-
-  googleMapsLinks.forEach((segment) => {
-    lines.push(`- ${formatSegmentLabel(segment.label)}: ${segment.url}`);
-  });
-
-  if (googleMapsLinks.length > 1) {
-    lines.push("", "Nota: abrir los tramos en orden.");
-  }
-
-  return lines.join("\n");
-}
-
-function formatSegmentLabel(label) {
-  if (!label) {
-    return "Ruta";
-  }
-  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function splitPointsForGoogleMaps(points, maxWaypoints) {
@@ -1280,7 +1219,7 @@ async function copyLinkToClipboard(url) {
   await copyTextToClipboard(url, "Link de Google Maps copiado.");
 }
 
-async function copyWhatsAppMessage(routeIndex) {
+async function copyGoogleMapsRoute(routeIndex) {
   if (!state.run) {
     return;
   }
@@ -1291,8 +1230,18 @@ async function copyWhatsAppMessage(routeIndex) {
   }
 
   const links = createGoogleMapsLinks(route.order, state.run.clients, state.run.depot, state.run.returnToDepot);
-  const message = buildWhatsAppMessage(route, routeIndex, links);
-  await copyTextToClipboard(message, "Mensaje para WhatsApp copiado.");
+  if (links.length === 0) {
+    setStatus("No se pudo generar la ruta de Google Maps.", "warn");
+    return;
+  }
+
+  if (links.length === 1) {
+    await copyLinkToClipboard(links[0].url);
+    return;
+  }
+
+  const message = links.map((segment, idx) => `Tramo ${idx + 1}: ${segment.url}`).join("\n");
+  await copyTextToClipboard(message, `Se copiaron ${links.length} tramos de Google Maps en orden.`);
 }
 
 function exportRouteForMyMaps(routeIndex, format) {
