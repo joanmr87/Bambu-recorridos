@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bambu Rutas - Optimizador de Reparto</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Planificador de Recorridos Bambú</h1>
+        <p>Optimización de reparto para clientes de Neuquén</p>
+      </div>
+    </header>
+
+    <main class="app-layout">
+      <section class="panel input-panel">
+        <h2>Datos de Entrada</h2>
+
+        <div class="field-group">
+          <label for="depot-lat">Depósito (Ingeniero Huergo por defecto)</label>
+          <div class="depot-grid">
+            <input id="depot-lat" type="number" step="0.000001" placeholder="-39.071500" />
+            <input id="depot-lng" type="number" step="0.000001" placeholder="-67.237900" />
+          </div>
+          <small>
+            El cálculo optimiza salida y regreso desde este punto. Si lo dejás vacío, calcula solo entre clientes.
+          </small>
+        </div>
+
+        <div class="field-group">
+          <label for="clients-input">Clientes</label>
+          <textarea
+            id="clients-input"
+            rows="14"
+            placeholder="Formato: Nombre, latitud, longitud&#10;Ej: Cliente Centro,-38.9516,-68.0591&#10;También acepta: latitud,longitud"
+          ></textarea>
+          <small>Una línea por cliente. Se aceptan coma, punto y coma o espacios.</small>
+        </div>
+
+        <div class="controls">
+          <label class="checkbox">
+            <input id="return-to-depot" type="checkbox" checked />
+            <span>Volver al depósito al finalizar</span>
+          </label>
+          <label class="checkbox">
+            <input id="use-road-network" type="checkbox" checked />
+            <span>Usar distancias reales de calle (OSRM)</span>
+          </label>
+          <button id="load-demo" type="button" class="ghost">Cargar ejemplo Neuquén</button>
+          <button id="optimize-btn" type="button">Calcular 3 recorridos óptimos</button>
+        </div>
+
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="panel map-panel">
+        <div id="map"></div>
+      </section>
+
+      <section class="panel results-panel">
+        <h2>Ranking de Recorridos</h2>
+        <div id="route-view-controls" class="route-view-controls" hidden>
+          <label for="route-selector">Orden mostrado en mapa</label>
+          <select id="route-selector"></select>
+          <small>Tip: también podés hacer clic en una tarjeta para cambiar el orden mostrado.</small>
+        </div>
+        <div id="results-empty" class="results-empty">
+          Cargá coordenadas y presioná "Calcular 3 recorridos óptimos".
+        </div>
+        <div id="results-list" class="results-list"></div>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
