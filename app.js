@@ -1097,22 +1097,8 @@ function splitPointsForGoogleMaps(points, maxWaypoints) {
 }
 
 function buildGoogleMapsDirectionsUrl(points) {
-  const origin = toLatLng(points[0]);
-  const destination = toLatLng(points[points.length - 1]);
-  const waypoints = points.slice(1, -1).map(toLatLng);
-
-  const params = new URLSearchParams({
-    api: "1",
-    origin,
-    destination,
-    travelmode: "driving",
-  });
-
-  if (waypoints.length > 0) {
-    params.set("waypoints", waypoints.join("|"));
-  }
-
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+  const sequence = points.map(toLatLng).join("/");
+  return `https://www.google.com/maps/dir/${encodeURI(sequence)}/?travelmode=driving`;
 }
 
 function toLatLng(point) {
