@@ -417,6 +417,38 @@ button.ghost {
   line-height: 1;
 }
 
+body.driver-mode .input-panel {
+  display: none;
+}
+
+body.driver-mode .app-layout {
+  grid-template-columns: 1fr 400px;
+}
+
+body.driver-mode .map-panel,
+body.driver-mode .results-panel {
+  max-height: calc(100vh - 120px);
+}
+
+body.driver-mode .route-view-controls {
+  display: none;
+}
+
+body.driver-mode .results-panel h2::after {
+  content: " (Chofer)";
+  font-size: 0.82em;
+  color: var(--accent);
+}
+
+body.driver-mode .stops {
+  max-height: none;
+  font-size: 1rem;
+}
+
+body.driver-mode .stops li {
+  margin-bottom: 0.35rem;
+}
+
 @media (max-width: 1180px) {
   .app-layout {
     grid-template-columns: 1fr;

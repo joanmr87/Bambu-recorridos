@@ -17,6 +17,7 @@ Aplicación web para que administración busque clientes desde Google Sheets en 
 - Cambio rápido de recorrido haciendo clic en la tarjeta del ranking.
 - Generación de links de Google Maps para cada recorrido (abrir o copiar para enviar al repartidor).
 - Botón para copiar mensaje listo para WhatsApp con los links del recorrido.
+- Botón para generar URL del propio sistema en modo chofer (mapa + puntos numerados).
 - Ranking con distancia total y tiempo estimado.
 
 ## Ejecutar local

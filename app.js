@@ -33,6 +33,7 @@ const state = {
   loadingSheets: false,
   run: null,
   selectedRouteIndex: 0,
+  driverMode: false,
 };
 
 const depotLatInput = document.getElementById("depot-lat");
@@ -54,6 +55,8 @@ const selectedCountEl = document.getElementById("selected-count");
 const sheetMetaEl = document.getElementById("sheet-meta");
 const reloadSheetsBtn = document.getElementById("reload-sheets");
 const clearSelectedBtn = document.getElementById("clear-selected");
+const appTitleEl = document.querySelector(".app-header h1");
+const appSubtitleEl = document.querySelector(".app-header p");
 
 init();
 
@@ -85,6 +88,14 @@ function init() {
       event.preventDefault();
       event.stopPropagation();
       copyWhatsAppMessage(Number(copyMessageButton.dataset.copyRouteIndex));
+      return;
+    }
+
+    const copyDriverUrlButton = event.target.closest("[data-copy-driver-url]");
+    if (copyDriverUrlButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      copyLinkToClipboard(copyDriverUrlButton.dataset.copyDriverUrl);
       return;
     }
 
@@ -165,6 +176,12 @@ function init() {
       hideSuggestions();
     }
   });
+
+  const sharedRoute = parseSharedRouteFromUrl();
+  if (sharedRoute) {
+    activateDriverMode(sharedRoute);
+    return;
+  }
 
   renderSelectedClients();
   setStatus("Sincronizando clientes desde Google Sheets...", "ok");
@@ -931,15 +948,9 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
     const etaMinutes = estimateMinutes(route.distanceKm);
     const routeStops = formatRouteStops(route.order, clients);
     const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
-    const whatsappMessage = buildWhatsAppMessage(
-      route,
-      idx,
-      googleMapsLinks,
-      clients,
-      depot,
-      returnToDepot,
-    );
+    const whatsappMessage = buildWhatsAppMessage(route, idx, googleMapsLinks);
     const whatsappShareUrl = createWhatsAppShareUrl(whatsappMessage);
+    const driverModeUrl = buildDriverModeUrl(route, idx, clients);
     const title = idx === 0 ? "Recorrido #1 (Más óptimo)" : `Recorrido #${idx + 1}`;
     const distanceLabel = depot
       ? "Distancia total (incluye viaje desde/hacia Ingeniero Huergo):"
@@ -985,11 +996,16 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
           </a>
         </div>
         <div class="gmaps-row">
-          <button class="copy-link-btn" type="button" data-export-route-index="${idx}" data-export-format="csv">
-            Exportar CSV My Maps
+          <button class="copy-link-btn" type="button" data-copy-driver-url="${escapeHtmlAttr(driverModeUrl)}">
+            Copiar URL modo chofer
           </button>
+          <a class="gmaps-link" href="${escapeHtmlAttr(driverModeUrl)}" target="_blank" rel="noopener noreferrer">
+            Abrir mapa modo chofer
+          </a>
+        </div>
+        <div class="gmaps-row">
           <button class="copy-link-btn" type="button" data-export-route-index="${idx}" data-export-format="kml">
-            Exportar KML My Maps
+            Exportar archivo My Maps (KML)
           </button>
         </div>
       </div>
@@ -1082,17 +1098,34 @@ function createWhatsAppShareUrl(message) {
   return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
-function buildWhatsAppMessage(route, routeIndex, googleMapsLinks, clients, depot, returnToDepot) {
-  const stops = buildRouteStopsForExport(route, clients, depot, returnToDepot);
+function buildDriverModeUrl(route, routeIndex, clients) {
+  const orderedStops = route.order.map((clientIndex, stopIndex) => {
+    const client = clients[clientIndex];
+    return {
+      label: stopIndex + 1,
+      name: client.name,
+      lat: round6(client.lat),
+      lng: round6(client.lng),
+    };
+  });
+
+  const payload = {
+    v: 1,
+    routeIndex: routeIndex + 1,
+    distanceKm: round2(route.distanceKm),
+    stops: orderedStops,
+  };
+
+  const encoded = encodeSharedPayload(payload);
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+  return `${baseUrl}?driver=1&route=${encoded}`;
+}
+
+function buildWhatsAppMessage(route, routeIndex, googleMapsLinks) {
   const lines = [
     `Bambú - Recorrido #${routeIndex + 1}`,
     `Paradas: ${route.order.length}`,
     `Distancia estimada: ${route.distanceKm.toFixed(2)} km`,
-    "",
-    "Orden de visita (seguir este orden):",
-    ...stops.map((stop, idx) => `${idx + 1}) ${stop.label} - ${stop.name}`),
-    "",
-    "Referencia: en Google Maps pueden verse direcciones; usar el orden de arriba.",
     "",
     "Navegación Google Maps:",
   ];
@@ -1137,6 +1170,112 @@ function toLatLng(point) {
   return `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
 }
 
+function parseSharedRouteFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("driver") !== "1") {
+    return null;
+  }
+
+  const encoded = params.get("route");
+  if (!encoded) {
+    return null;
+  }
+
+  try {
+    const decoded = decodeSharedPayload(encoded);
+    if (!decoded || !Array.isArray(decoded.stops)) {
+      return null;
+    }
+
+    const normalizedStops = decoded.stops
+      .map((stop, idx) => ({
+        label: Number.isFinite(stop.label) ? stop.label : idx + 1,
+        name: String(stop.name || `Parada ${idx + 1}`),
+        lat: Number(stop.lat),
+        lng: Number(stop.lng),
+      }))
+      .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng))
+      .filter((stop) => Math.abs(stop.lat) <= 90 && Math.abs(stop.lng) <= 180);
+
+    if (normalizedStops.length < 2) {
+      return null;
+    }
+
+    return {
+      routeIndex: Number(decoded.routeIndex) || 1,
+      distanceKm: Number(decoded.distanceKm) || 0,
+      stops: normalizedStops,
+    };
+  } catch (error) {
+    console.warn("No se pudo parsear el enlace compartido de modo chofer:", error);
+    return null;
+  }
+}
+
+function activateDriverMode(sharedRoute) {
+  state.driverMode = true;
+  document.body.classList.add("driver-mode");
+
+  if (appTitleEl) {
+    appTitleEl.textContent = `Bambú - Modo Chofer`;
+  }
+  if (appSubtitleEl) {
+    appSubtitleEl.textContent = `Recorrido #${sharedRoute.routeIndex}`;
+  }
+
+  const clients = sharedRoute.stops.map((stop) => ({
+    name: stop.name,
+    lat: stop.lat,
+    lng: stop.lng,
+  }));
+  const rankedRoutes = [
+    {
+      order: clients.map((_, idx) => idx),
+      distanceKm: sharedRoute.distanceKm,
+    },
+  ];
+
+  state.run = {
+    clients,
+    rankedRoutes,
+    depot: null,
+    returnToDepot: false,
+  };
+  state.selectedRouteIndex = 0;
+
+  updateRouteSelector(1, 0);
+  clearMapLayers();
+  clearResults();
+  refreshMapAndResults();
+  setStatus("Modo chofer activo. Seguí los puntos numerados en orden.", "ok");
+}
+
+function encodeSharedPayload(payload) {
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeSharedPayload(encoded) {
+  const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const text = new TextDecoder().decode(bytes);
+  return JSON.parse(text);
+}
+
+function round6(value) {
+  return Number(Number(value).toFixed(6));
+}
+
+function round2(value) {
+  return Number(Number(value).toFixed(2));
+}
+
 async function copyLinkToClipboard(url) {
   await copyTextToClipboard(url, "Link de Google Maps copiado.");
 }
@@ -1152,14 +1291,7 @@ async function copyWhatsAppMessage(routeIndex) {
   }
 
   const links = createGoogleMapsLinks(route.order, state.run.clients, state.run.depot, state.run.returnToDepot);
-  const message = buildWhatsAppMessage(
-    route,
-    routeIndex,
-    links,
-    state.run.clients,
-    state.run.depot,
-    state.run.returnToDepot,
-  );
+  const message = buildWhatsAppMessage(route, routeIndex, links);
   await copyTextToClipboard(message, "Mensaje para WhatsApp copiado.");
 }
 
