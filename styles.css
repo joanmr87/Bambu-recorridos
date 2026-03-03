@@ -241,6 +241,51 @@ button.ghost {
   margin-bottom: 0.2rem;
 }
 
+.gmaps-block {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--border);
+}
+
+.gmaps-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+
+.gmaps-row {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.gmaps-link,
+.copy-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 7px;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid #bae6fd;
+  background: #f0f9ff;
+  color: #0c4a6e;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.copy-link-btn {
+  border-color: #99f6e4;
+  background: #ecfeff;
+  color: #134e4a;
+}
+
+.gmaps-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .swatch {
   display: inline-block;
   width: 10px;

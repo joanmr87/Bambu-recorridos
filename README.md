@@ -12,6 +12,8 @@ Aplicación web para que administración cargue coordenadas de clientes, visuali
 - Marcadores numerados en mapa según el recorrido seleccionado (#1, #2 o #3).
 - Selector para mostrar en mapa el orden de visita del Recorrido #1, #2 o #3.
 - Cambio rápido de recorrido haciendo clic en la tarjeta del ranking.
+- Generación de links de Google Maps para cada recorrido (abrir o copiar para enviar al repartidor).
+- Botón para copiar mensaje listo para WhatsApp con los links del recorrido.
 - Ranking con distancia total y tiempo estimado.
 
 ## Ejecutar local

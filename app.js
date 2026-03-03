@@ -1,18 +1,6 @@
-const DEMO_DATA = `GREGORIO MARTINEZ 1615, NEUQUEN
--38.938063, -68.081729
-JOSE NOGARA 634 CASA 306, NEUQUEN
--38.9614918, -68.0880338
-SALTA 434, NEUQUEN
--38.95036467280053, -68.06612225045183
-RIO DIAMANTE 291, NEUQUEN
--38.952331, -68.037419
-RIO MOCORETA 75, NEUQUEN
--38.952805, -68.032581
-CHAJARI 5180, NEUQUEN
--38.947838, -68.13057`;
-
 const ROUTE_COLORS = ["#0ea5e9", "#f97316", "#10b981"];
 const DEFAULT_DEPOT = { lat: -39.0715, lng: -67.2379 };
+const MAX_GMAPS_WAYPOINTS = 8;
 
 const state = {
   map: null,
@@ -30,7 +18,6 @@ const depotLngInput = document.getElementById("depot-lng");
 const returnToDepotInput = document.getElementById("return-to-depot");
 const useRoadNetworkInput = document.getElementById("use-road-network");
 const optimizeBtn = document.getElementById("optimize-btn");
-const loadDemoBtn = document.getElementById("load-demo");
 const statusEl = document.getElementById("status");
 const resultsEmptyEl = document.getElementById("results-empty");
 const resultsListEl = document.getElementById("results-list");
@@ -45,11 +32,6 @@ function init() {
   depotLatInput.value = String(DEFAULT_DEPOT.lat);
   depotLngInput.value = String(DEFAULT_DEPOT.lng);
 
-  loadDemoBtn.addEventListener("click", () => {
-    clientsInput.value = DEMO_DATA;
-    setStatus("Se cargó el ejemplo de Neuquén.", "ok");
-  });
-
   optimizeBtn.addEventListener("click", async () => {
     await runOptimization();
   });
@@ -58,6 +40,26 @@ function init() {
     selectRoute(index);
   });
   resultsListEl.addEventListener("click", (event) => {
+    const copyButton = event.target.closest("[data-copy-url]");
+    if (copyButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      copyLinkToClipboard(copyButton.dataset.copyUrl);
+      return;
+    }
+
+    const copyMessageButton = event.target.closest("[data-copy-route-index]");
+    if (copyMessageButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      copyWhatsAppMessage(Number(copyMessageButton.dataset.copyRouteIndex));
+      return;
+    }
+
+    if (event.target.closest("a,button")) {
+      return;
+    }
+
     const card = event.target.closest("[data-route-index]");
     if (!card) {
       return;
@@ -482,6 +484,9 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
 
     const etaMinutes = estimateMinutes(route.distanceKm);
     const routeStops = formatRouteStops(route.order, clients);
+    const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
+    const whatsappMessage = buildWhatsAppMessage(route, idx, googleMapsLinks);
+    const whatsappShareUrl = createWhatsAppShareUrl(whatsappMessage);
     const title = idx === 0 ? "Recorrido #1 (Más óptimo)" : `Recorrido #${idx + 1}`;
     const distanceLabel = depot
       ? "Distancia total (incluye viaje desde/hacia Ingeniero Huergo):"
@@ -497,6 +502,36 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
       <ol class="stops">
         ${routeStops.map((stop) => `<li>${escapeHtml(stop)}</li>`).join("")}
       </ol>
+      <div class="gmaps-block">
+        <div class="gmaps-title">Navegación para repartidor</div>
+        ${googleMapsLinks
+          .map(
+            (segment) => `
+            <div class="gmaps-row">
+              <a class="gmaps-link" href="${escapeHtmlAttr(segment.url)}" target="_blank" rel="noopener noreferrer">
+                Abrir ${escapeHtml(segment.label)}
+              </a>
+              <button class="copy-link-btn" type="button" data-copy-url="${escapeHtmlAttr(segment.url)}">
+                Copiar ${escapeHtml(segment.label)}
+              </button>
+            </div>
+          `,
+          )
+          .join("")}
+        ${
+          googleMapsLinks.length > 1
+            ? `<small class="gmaps-note">Se generaron ${googleMapsLinks.length} tramos por límite de puntos de Google Maps.</small>`
+            : ""
+        }
+        <div class="gmaps-row">
+          <button class="copy-link-btn" type="button" data-copy-route-index="${idx}">
+            Copiar mensaje WhatsApp
+          </button>
+          <a class="gmaps-link" href="${escapeHtmlAttr(whatsappShareUrl)}" target="_blank" rel="noopener noreferrer">
+            Abrir WhatsApp con mensaje
+          </a>
+        </div>
+      </div>
     `;
 
     resultsListEl.appendChild(card);
@@ -551,6 +586,138 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeHtmlAttr(value) {
+  return escapeHtml(value);
+}
+
+function createGoogleMapsLinks(order, clients, depot, returnToDepot) {
+  const points = [];
+  if (depot) {
+    points.push({ lat: depot.lat, lng: depot.lng });
+  }
+  order.forEach((clientIndex) => {
+    const client = clients[clientIndex];
+    points.push({ lat: client.lat, lng: client.lng });
+  });
+  if (depot && returnToDepot) {
+    points.push({ lat: depot.lat, lng: depot.lng });
+  }
+
+  if (points.length < 2) {
+    return [];
+  }
+
+  const segments = splitPointsForGoogleMaps(points, MAX_GMAPS_WAYPOINTS);
+  return segments.map((segment, idx) => ({
+    label: segments.length === 1 ? "ruta completa" : `tramo ${idx + 1}`,
+    url: buildGoogleMapsDirectionsUrl(segment),
+  }));
+}
+
+function createWhatsAppShareUrl(message) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
+
+function buildWhatsAppMessage(route, routeIndex, googleMapsLinks) {
+  const lines = [
+    `Bambú - Recorrido #${routeIndex + 1}`,
+    `Paradas: ${route.order.length}`,
+    `Distancia estimada: ${route.distanceKm.toFixed(2)} km`,
+    "",
+    "Navegación Google Maps:",
+  ];
+
+  googleMapsLinks.forEach((segment) => {
+    lines.push(`- ${formatSegmentLabel(segment.label)}: ${segment.url}`);
+  });
+
+  if (googleMapsLinks.length > 1) {
+    lines.push("", "Nota: abrir los tramos en orden.");
+  }
+
+  return lines.join("\n");
+}
+
+function formatSegmentLabel(label) {
+  if (!label) {
+    return "Ruta";
+  }
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function splitPointsForGoogleMaps(points, maxWaypoints) {
+  const segments = [];
+  let startIndex = 0;
+
+  while (startIndex < points.length - 1) {
+    const endIndex = Math.min(startIndex + maxWaypoints + 1, points.length - 1);
+    segments.push(points.slice(startIndex, endIndex + 1));
+    startIndex = endIndex;
+  }
+
+  return segments;
+}
+
+function buildGoogleMapsDirectionsUrl(points) {
+  const origin = toLatLng(points[0]);
+  const destination = toLatLng(points[points.length - 1]);
+  const waypoints = points.slice(1, -1).map(toLatLng);
+
+  const params = new URLSearchParams({
+    api: "1",
+    origin,
+    destination,
+    travelmode: "driving",
+  });
+  if (waypoints.length > 0) {
+    params.set("waypoints", waypoints.join("|"));
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function toLatLng(point) {
+  return `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`;
+}
+
+async function copyLinkToClipboard(url) {
+  await copyTextToClipboard(url, "Link de Google Maps copiado.");
+}
+
+async function copyWhatsAppMessage(routeIndex) {
+  if (!state.run) {
+    return;
+  }
+  const route = state.run.rankedRoutes[routeIndex];
+  if (!route) {
+    return;
+  }
+  const links = createGoogleMapsLinks(route.order, state.run.clients, state.run.depot, state.run.returnToDepot);
+  const message = buildWhatsAppMessage(route, routeIndex, links);
+  await copyTextToClipboard(message, "Mensaje para WhatsApp copiado.");
+}
+
+async function copyTextToClipboard(text, successMessage) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+    }
+    setStatus(successMessage, "ok");
+  } catch {
+    setStatus("No se pudo copiar el link automáticamente.", "warn");
+  }
 }
 
 function updateRouteSelector(routeCount, selectedIndex) {
