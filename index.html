@@ -29,21 +29,18 @@
           <select id="start-point-mode">
             <option value="default">Depósito por defecto (Ingeniero Huergo)</option>
             <option value="client">Cliente (elegir de la lista)</option>
-            <option value="manual">Coordenadas manuales</option>
+            <option value="map">Elegir punto en el mapa</option>
             <option value="none">Sin punto de salida fijo</option>
           </select>
           <div id="start-client-group" class="nested-field" hidden>
             <label for="start-client-select">Cliente de salida</label>
             <select id="start-client-select"></select>
           </div>
-          <div id="start-manual-group" class="nested-field" hidden>
-            <label for="depot-lat">Coordenadas de salida</label>
-            <div class="depot-grid">
-              <input id="depot-lat" type="number" step="0.000001" placeholder="-39.071500" />
-              <input id="depot-lng" type="number" step="0.000001" placeholder="-67.237900" />
-            </div>
+          <div id="start-map-group" class="nested-field" hidden>
+            <button id="pick-start-point-btn" type="button" class="ghost">Seleccionar punto en el mapa</button>
+            <small id="start-map-coords">Todavía no seleccionaste un punto.</small>
           </div>
-          <small id="start-point-help">La ruta sale desde Ingeniero Huergo. Podés cambiarlo por cliente o manual.</small>
+          <small id="start-point-help">La ruta sale desde Ingeniero Huergo. Podés cambiarlo por cliente o mapa.</small>
         </div>
 
         <div class="field-group" id="client-search-block">

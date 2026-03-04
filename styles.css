@@ -382,6 +382,17 @@ button.ghost {
   border-radius: 10px;
 }
 
+#map.pick-start-point-mode {
+  cursor: crosshair;
+  box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.28) inset;
+}
+
+#start-map-coords {
+  display: block;
+  margin-top: 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .results-empty {
   color: var(--muted);
   padding: 0.7rem;

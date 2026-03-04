@@ -27,6 +27,8 @@ const state = {
   map: null,
   pointsLayer: null,
   routesLayer: null,
+  startPointLayer: null,
+  startPointMarker: null,
   markers: [],
   polylines: [],
   availableClients: [],
@@ -37,14 +39,16 @@ const state = {
   selectedRouteIndex: 0,
   driverMode: false,
   routeEditorSortable: null,
+  selectedMapStartPoint: null,
+  pickingMapStartPoint: false,
 };
 
-const depotLatInput = document.getElementById("depot-lat");
-const depotLngInput = document.getElementById("depot-lng");
 const startPointModeEl = document.getElementById("start-point-mode");
 const startClientGroupEl = document.getElementById("start-client-group");
 const startClientSelectEl = document.getElementById("start-client-select");
-const startManualGroupEl = document.getElementById("start-manual-group");
+const startMapGroupEl = document.getElementById("start-map-group");
+const pickStartPointBtn = document.getElementById("pick-start-point-btn");
+const startMapCoordsEl = document.getElementById("start-map-coords");
 const startPointHelpEl = document.getElementById("start-point-help");
 const departureTimeInput = document.getElementById("departure-time");
 const manualOrderModeInput = document.getElementById("manual-order-mode");
@@ -76,8 +80,6 @@ init();
 
 function init() {
   initMap();
-  depotLatInput.value = String(DEFAULT_DEPOT.lat);
-  depotLngInput.value = String(DEFAULT_DEPOT.lng);
   startPointModeEl.value = "default";
   manualOrderModeInput.checked = false;
   updateStartPointControls();
@@ -184,6 +186,10 @@ function init() {
     invalidateComputedRoutes();
   });
 
+  pickStartPointBtn.addEventListener("click", () => {
+    beginMapStartPointSelection();
+  });
+
   departureTimeInput.addEventListener("change", () => {
     if (state.run) {
       refreshMapAndResults();
@@ -242,6 +248,14 @@ function initMap() {
 
   state.pointsLayer = L.layerGroup().addTo(state.map);
   state.routesLayer = L.layerGroup().addTo(state.map);
+  state.startPointLayer = L.layerGroup().addTo(state.map);
+
+  state.map.on("click", (event) => {
+    if (!state.pickingMapStartPoint || startPointModeEl.value !== "map") {
+      return;
+    }
+    setMapStartPoint(event.latlng.lat, event.latlng.lng);
+  });
 }
 
 function initRouteEditor() {
@@ -265,6 +279,64 @@ function initRouteEditor() {
       applyRouteEditorOrder();
     },
   });
+}
+
+function beginMapStartPointSelection() {
+  if (startPointModeEl.value !== "map") {
+    startPointModeEl.value = "map";
+    updateStartPointControls();
+  }
+
+  state.pickingMapStartPoint = true;
+  const mapEl = state.map?.getContainer();
+  if (mapEl) {
+    mapEl.classList.add("pick-start-point-mode");
+  }
+
+  setStatus("Hacé clic en el mapa para fijar el punto de salida.", "ok");
+}
+
+function setMapStartPoint(lat, lng) {
+  state.selectedMapStartPoint = {
+    lat: round6(lat),
+    lng: round6(lng),
+    name: "Punto elegido en mapa",
+  };
+  state.pickingMapStartPoint = false;
+
+  const mapEl = state.map?.getContainer();
+  if (mapEl) {
+    mapEl.classList.remove("pick-start-point-mode");
+  }
+
+  renderMapStartPointMarker();
+  updateStartPointControls();
+  invalidateComputedRoutes();
+  setStatus(
+    `Punto de salida seleccionado: ${state.selectedMapStartPoint.lat.toFixed(6)}, ${state.selectedMapStartPoint.lng.toFixed(6)}`,
+    "ok",
+  );
+}
+
+function renderMapStartPointMarker() {
+  state.startPointLayer.clearLayers();
+  state.startPointMarker = null;
+
+  if (startPointModeEl.value !== "map" || !state.selectedMapStartPoint) {
+    return;
+  }
+
+  const point = state.selectedMapStartPoint;
+  const marker = L.circleMarker([point.lat, point.lng], {
+    radius: 9,
+    color: "#0c4a6e",
+    fillColor: "#38bdf8",
+    fillOpacity: 0.92,
+    weight: 2,
+  }).addTo(state.startPointLayer);
+
+  marker.bindPopup(`<b>Punto de salida</b><br>${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}`);
+  state.startPointMarker = marker;
 }
 
 async function loadClientsFromSheets(manualRefresh) {
@@ -770,23 +842,40 @@ function populateStartClientSelect() {
 function updateStartPointControls() {
   const mode = startPointModeEl.value;
   startClientGroupEl.hidden = mode !== "client";
-  startManualGroupEl.hidden = mode !== "manual";
+  startMapGroupEl.hidden = mode !== "map";
 
   if (mode === "none") {
     returnToDepotInput.checked = false;
     returnToDepotInput.disabled = true;
+    state.pickingMapStartPoint = false;
+    const mapEl = state.map?.getContainer();
+    if (mapEl) {
+      mapEl.classList.remove("pick-start-point-mode");
+    }
     startPointHelpEl.textContent = "La ruta se calcula solamente entre clientes seleccionados.";
+    renderMapStartPointMarker();
     return;
   }
 
   returnToDepotInput.disabled = false;
 
   if (mode === "default") {
+    state.pickingMapStartPoint = false;
+    const mapEl = state.map?.getContainer();
+    if (mapEl) {
+      mapEl.classList.remove("pick-start-point-mode");
+    }
     startPointHelpEl.textContent = "Salida y regreso desde Ingeniero Huergo.";
+    renderMapStartPointMarker();
     return;
   }
 
   if (mode === "client") {
+    state.pickingMapStartPoint = false;
+    const mapEl = state.map?.getContainer();
+    if (mapEl) {
+      mapEl.classList.remove("pick-start-point-mode");
+    }
     if (startClientSelectEl.disabled || !startClientSelectEl.value) {
       startPointHelpEl.textContent = "Primero cargá clientes para poder elegir salida desde cliente.";
     } else {
@@ -794,10 +883,17 @@ function updateStartPointControls() {
       const clientName = client ? client.name : "cliente seleccionado";
       startPointHelpEl.textContent = `La ruta saldrá desde: ${clientName}.`;
     }
+    renderMapStartPointMarker();
     return;
   }
 
-  startPointHelpEl.textContent = "Definí latitud/longitud manual para salida y opcional regreso.";
+  if (state.selectedMapStartPoint) {
+    startMapCoordsEl.textContent = `${state.selectedMapStartPoint.lat.toFixed(6)}, ${state.selectedMapStartPoint.lng.toFixed(6)}`;
+  } else {
+    startMapCoordsEl.textContent = "Todavía no seleccionaste un punto.";
+  }
+  startPointHelpEl.textContent = "Usá el botón y luego hacé clic en el mapa para fijar la salida.";
+  renderMapStartPointMarker();
 }
 
 function updateOptimizeButtonLabel() {
@@ -831,6 +927,10 @@ async function runOptimization() {
 
   const depot = resolveStartPoint();
   if (!depot && startPointModeEl.value !== "none") {
+    if (startPointModeEl.value === "map") {
+      setStatus("Seleccioná un punto en el mapa para usarlo como salida.", "warn");
+      return;
+    }
     setStatus("Revisá el punto de salida seleccionado antes de calcular.", "warn");
     return;
   }
@@ -894,19 +994,15 @@ function resolveStartPoint() {
     return { lat: client.lat, lng: client.lng, name: `Cliente: ${client.name}` };
   }
 
-  return parseDepot(depotLatInput.value, depotLngInput.value, "Punto manual");
-}
+  if (!state.selectedMapStartPoint) {
+    return null;
+  }
 
-function parseDepot(latRaw, lngRaw, name = "Punto de salida") {
-  const lat = Number(latRaw);
-  const lng = Number(lngRaw);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return null;
-  }
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-    return null;
-  }
-  return { lat, lng, name };
+  return {
+    lat: state.selectedMapStartPoint.lat,
+    lng: state.selectedMapStartPoint.lng,
+    name: "Punto elegido en mapa",
+  };
 }
 
 function parseTimeToMinutes(raw) {
