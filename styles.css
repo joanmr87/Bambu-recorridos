@@ -218,6 +218,87 @@ button.ghost {
   overflow: auto;
 }
 
+.route-editor-panel {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.75rem;
+}
+
+.route-editor-help {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.route-editor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 260px;
+  overflow: auto;
+  background: #fff;
+}
+
+.route-editor-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.52rem 0.6rem;
+  border-bottom: 1px solid #eef2f7;
+  background: #fff;
+}
+
+.route-editor-item:last-child {
+  border-bottom: none;
+}
+
+.route-editor-handle {
+  cursor: grab;
+  user-select: none;
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.route-editor-order {
+  min-width: 1.35rem;
+  text-align: right;
+  font-size: 0.84rem;
+  color: #0c4a6e;
+  font-weight: 700;
+}
+
+.route-editor-text {
+  min-width: 0;
+}
+
+.route-editor-main {
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-editor-sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.route-editor-ghost {
+  opacity: 0.45;
+}
+
+.route-editor-chosen {
+  background: #f0f9ff;
+}
+
+.route-editor-actions {
+  margin-top: 0.45rem;
+  display: flex;
+}
+
 .selected-empty {
   padding: 0.65rem;
   color: var(--muted);

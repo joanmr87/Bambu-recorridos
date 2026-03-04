@@ -68,6 +68,17 @@
           <small>Podés ordenar con flechas ↑ y ↓ para usar un recorrido manual.</small>
         </div>
 
+        <div class="field-group route-editor-panel" id="route-editor-panel" hidden>
+          <label>Editar recorrido recomendado</label>
+          <div id="route-editor-help" class="route-editor-help">
+            Arrastrá las paradas para ajustar el orden del recorrido seleccionado.
+          </div>
+          <ul id="route-editor-list" class="route-editor-list"></ul>
+          <div class="route-editor-actions">
+            <button id="reset-route-order" type="button" class="ghost">Restaurar orden sugerido</button>
+          </div>
+        </div>
+
         <div class="field-group">
           <label for="departure-time">Hora de salida (opcional)</label>
           <input id="departure-time" type="time" />
@@ -116,6 +127,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

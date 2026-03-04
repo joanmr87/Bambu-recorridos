@@ -36,6 +36,7 @@ const state = {
   run: null,
   selectedRouteIndex: 0,
   driverMode: false,
+  routeEditorSortable: null,
 };
 
 const depotLatInput = document.getElementById("depot-lat");
@@ -61,6 +62,10 @@ const clientSearchInput = document.getElementById("client-search");
 const clientSuggestionsEl = document.getElementById("client-suggestions");
 const selectedClientsListEl = document.getElementById("selected-clients-list");
 const selectedCountEl = document.getElementById("selected-count");
+const routeEditorPanelEl = document.getElementById("route-editor-panel");
+const routeEditorListEl = document.getElementById("route-editor-list");
+const routeEditorHelpEl = document.getElementById("route-editor-help");
+const resetRouteOrderBtn = document.getElementById("reset-route-order");
 const sheetMetaEl = document.getElementById("sheet-meta");
 const reloadSheetsBtn = document.getElementById("reload-sheets");
 const clearSelectedBtn = document.getElementById("clear-selected");
@@ -76,6 +81,7 @@ function init() {
   startPointModeEl.value = "default";
   updateStartPointControls();
   updateOptimizeButtonLabel();
+  initRouteEditor();
 
   optimizeBtn.addEventListener("click", async () => {
     await runOptimization();
@@ -203,6 +209,10 @@ function init() {
     setStatus("Selección limpiada.", "ok");
   });
 
+  resetRouteOrderBtn.addEventListener("click", () => {
+    restoreSuggestedOrder();
+  });
+
   document.addEventListener("click", (event) => {
     if (!clientSearchBlockEl.contains(event.target)) {
       hideSuggestions();
@@ -231,6 +241,29 @@ function initMap() {
 
   state.pointsLayer = L.layerGroup().addTo(state.map);
   state.routesLayer = L.layerGroup().addTo(state.map);
+}
+
+function initRouteEditor() {
+  if (!routeEditorListEl) {
+    return;
+  }
+
+  if (typeof window.Sortable !== "function") {
+    routeEditorHelpEl.textContent =
+      "Editor de arrastre no disponible en este navegador. Podés usar las flechas del listado.";
+    return;
+  }
+
+  state.routeEditorSortable = window.Sortable.create(routeEditorListEl, {
+    animation: 150,
+    handle: ".route-editor-handle",
+    ghostClass: "route-editor-ghost",
+    chosenClass: "route-editor-chosen",
+    dragClass: "route-editor-drag",
+    onEnd: () => {
+      applyRouteEditorOrder();
+    },
+  });
 }
 
 async function loadClientsFromSheets(manualRefresh) {
@@ -777,6 +810,7 @@ function invalidateComputedRoutes() {
   state.selectedRouteIndex = 0;
   clearMapLayers();
   clearResults();
+  clearRouteEditor();
 }
 
 async function runOptimization() {
@@ -805,7 +839,12 @@ async function runOptimization() {
 
   setStatus("Calculando rutas...", "ok");
   const distanceModel = await buildDistanceModel(clients, depot, returnToDepot, useRoadNetwork);
-  const rankedRoutes = manualOrderMode ? buildManualRoute(distanceModel) : buildTopRoutes(distanceModel, 3);
+  const rankedRoutesRaw = manualOrderMode ? buildManualRoute(distanceModel) : buildTopRoutes(distanceModel, 3);
+  const rankedRoutes = rankedRoutesRaw.map((route) => ({
+    ...route,
+    originalOrder: [...route.order],
+    userEdited: false,
+  }));
 
   if (rankedRoutes.length === 0) {
     setStatus("No se pudieron generar rutas. Revisá los datos de entrada.", "warn");
@@ -1188,6 +1227,7 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
       : idx === 0
         ? "Recorrido #1 (Más óptimo)"
         : `Recorrido #${idx + 1}`;
+    const titleWithEdit = route.userEdited ? `${title} (Ajustado manualmente)` : title;
     const distanceLabel = depot
       ? `Distancia total (desde ${depot.name}${returnToDepot ? " y regreso" : ""}):`
       : "Distancia total:";
@@ -1199,7 +1239,7 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
       : "";
 
     card.innerHTML = `
-      <h3><span class="swatch" style="background:${ROUTE_COLORS[idx % ROUTE_COLORS.length]}"></span>${title}</h3>
+      <h3><span class="swatch" style="background:${ROUTE_COLORS[idx % ROUTE_COLORS.length]}"></span>${titleWithEdit}</h3>
       <div class="metrics">
         <span><b>${escapeHtml(distanceLabel)}</b> ${route.distanceKm.toFixed(2)} km</span>
         <span><b>Tiempo estimado:</b> ${etaMinutes} min</span>
@@ -1256,6 +1296,94 @@ function formatRouteStops(order, clients, arrivalByClientIndex) {
       arrivalLabel: arrivalByClientIndex?.get(clientIndex) || null,
     };
   });
+}
+
+function renderRouteEditor(clients, route, routeIndex) {
+  if (!route || !routeEditorPanelEl || state.driverMode) {
+    clearRouteEditor();
+    return;
+  }
+
+  routeEditorPanelEl.hidden = false;
+  routeEditorHelpEl.textContent = route.userEdited
+    ? `Recorrido ${routeIndex + 1}: orden editado manualmente. Arrastrá para ajustar más.`
+    : `Recorrido ${routeIndex + 1}: arrastrá las paradas para ajustar el orden sugerido por el algoritmo.`;
+
+  routeEditorListEl.innerHTML = route.order
+    .map((clientIndex, idx) => {
+      const client = clients[clientIndex];
+      if (!client) {
+        return "";
+      }
+      return `
+      <li class="route-editor-item" data-client-index="${clientIndex}">
+        <span class="route-editor-handle" title="Arrastrar parada" aria-label="Arrastrar parada">⋮⋮</span>
+        <span class="route-editor-order">${idx + 1}</span>
+        <div class="route-editor-text">
+          <div class="route-editor-main">${escapeHtml(client.name)}</div>
+          <div class="route-editor-sub">${escapeHtml(client.city || "Sin ciudad")}</div>
+        </div>
+      </li>
+    `;
+    })
+    .join("");
+
+  resetRouteOrderBtn.disabled = !Array.isArray(route.originalOrder) || route.originalOrder.length === 0;
+}
+
+function applyRouteEditorOrder() {
+  if (!state.run) {
+    return;
+  }
+  const route = state.run.rankedRoutes[state.selectedRouteIndex];
+  if (!route) {
+    return;
+  }
+
+  const newOrder = Array.from(routeEditorListEl.querySelectorAll("[data-client-index]"))
+    .map((item) => Number(item.dataset.clientIndex))
+    .filter((value) => Number.isInteger(value));
+
+  if (newOrder.length !== route.order.length) {
+    return;
+  }
+
+  const changed = newOrder.some((clientIndex, idx) => clientIndex !== route.order[idx]);
+  if (!changed) {
+    return;
+  }
+
+  route.order = newOrder;
+  route.userEdited = true;
+  if (!Array.isArray(route.originalOrder) || route.originalOrder.length === 0) {
+    route.originalOrder = [...newOrder];
+  }
+
+  if (state.run.distanceModel) {
+    route.distanceKm = routeDistance(newOrder, state.run.distanceModel);
+  }
+
+  refreshMapAndResults();
+  setStatus("Orden del recorrido actualizado manualmente.", "ok");
+}
+
+function restoreSuggestedOrder() {
+  if (!state.run) {
+    return;
+  }
+  const route = state.run.rankedRoutes[state.selectedRouteIndex];
+  if (!route || !Array.isArray(route.originalOrder) || route.originalOrder.length === 0) {
+    return;
+  }
+
+  route.order = [...route.originalOrder];
+  route.userEdited = false;
+  if (state.run.distanceModel) {
+    route.distanceKm = routeDistance(route.order, state.run.distanceModel);
+  }
+
+  refreshMapAndResults();
+  setStatus("Se restauró el orden sugerido por el algoritmo.", "ok");
 }
 
 function estimateMinutes(distanceKm) {
@@ -1334,6 +1462,12 @@ function clearResults() {
   resultsListEl.innerHTML = "";
   resultsEmptyEl.style.display = "block";
   routeViewControlsEl.hidden = true;
+}
+
+function clearRouteEditor() {
+  routeEditorPanelEl.hidden = true;
+  routeEditorListEl.innerHTML = "";
+  resetRouteOrderBtn.disabled = true;
 }
 
 function setStatus(message, type = "ok") {
@@ -1487,6 +1621,8 @@ function activateDriverMode(sharedRoute) {
     {
       order: clients.map((_, idx) => idx),
       distanceKm: sharedRoute.distanceKm,
+      originalOrder: clients.map((_, idx) => idx),
+      userEdited: false,
     },
   ];
 
@@ -1504,6 +1640,7 @@ function activateDriverMode(sharedRoute) {
   updateRouteSelector(1, 0);
   clearMapLayers();
   clearResults();
+  clearRouteEditor();
   refreshMapAndResults();
   setStatus("Modo chofer activo. Seguí los puntos numerados en orden.", "ok");
 }
@@ -1822,7 +1959,8 @@ function updateRouteSelector(routeCount, selectedIndex) {
   for (let idx = 0; idx < routeCount; idx += 1) {
     const option = document.createElement("option");
     option.value = String(idx);
-    option.textContent = routes[idx]?.isManual ? "Recorrido manual" : `Recorrido #${idx + 1}`;
+    const baseLabel = routes[idx]?.isManual ? "Recorrido manual" : `Recorrido #${idx + 1}`;
+    option.textContent = routes[idx]?.userEdited ? `${baseLabel} (editado)` : baseLabel;
     routeSelectorEl.appendChild(option);
   }
 
@@ -1857,4 +1995,5 @@ function refreshMapAndResults() {
   plotPoints(clients, visitOrder);
   drawRoutes(clients, rankedRoutes);
   renderResults(clients, rankedRoutes, depot, returnToDepot);
+  renderRouteEditor(clients, selectedRoute, state.selectedRouteIndex);
 }
