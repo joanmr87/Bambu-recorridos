@@ -1648,79 +1648,112 @@ function buildMyMapsCsv(stops, routeName) {
 }
 
 function buildMyMapsKml(stops, routeName) {
-  const markerStyles = stops
-    .map((stop, idx) => {
-      const styleId = `stopMarker${idx + 1}`;
-      const iconHref = buildKmlMarkerIconHref(stop.label, idx);
-      return `
-    <Style id="${styleId}">
-      <IconStyle>
-        <scale>1.2</scale>
-        <Icon><href>${xmlEscape(iconHref)}</href></Icon>
-      </IconStyle>
-      <LabelStyle><scale>0</scale></LabelStyle>
-    </Style>`;
-    })
-    .join("");
-
+  const firstStop = stops[0];
+  const lastStop = stops[stops.length - 1];
+  const directionsName = `Indicaciones de ${firstStop.name} a ${lastStop.name}`;
   const placemarks = stops
-    .map((stop, idx) => {
-      const name = xmlEscape(stop.label);
-      const description = xmlEscape(`${routeName} - ${stop.name}`);
-      return `
-    <Placemark>
-      <name>${name}</name>
-      <description>${description}</description>
-      <styleUrl>#stopMarker${idx + 1}</styleUrl>
-      <Point><coordinates>${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0</coordinates></Point>
-    </Placemark>`;
-    })
+    .map(
+      (stop, idx) => `
+      <Placemark>
+        <name>${xmlEscape(stop.name)}</name>
+        <description><![CDATA[Orden: ${stop.label} (${idx + 1})]]></description>
+        <styleUrl>#icon-1899-DB4436-nodesc</styleUrl>
+        <Point>
+          <coordinates>
+            ${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0
+          </coordinates>
+        </Point>
+      </Placemark>`,
+    )
     .join("");
 
-  const lineCoordinates = stops
-    .map((stop) => `${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0`)
-    .join(" ");
+  const lineCoordinates = stops.map((stop) => `${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0`).join("\n            ");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>${xmlEscape(routeName)}</name>
-    <Style id="routeLine">
+    <description/>
+    <Style id="icon-1899-DB4436-nodesc-normal">
+      <IconStyle>
+        <color>ff3644db</color>
+        <scale>1</scale>
+        <Icon>
+          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
+        </Icon>
+        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
+      </IconStyle>
+      <LabelStyle>
+        <scale>1</scale>
+      </LabelStyle>
+      <BalloonStyle>
+        <text><![CDATA[<h3>$[name]</h3><div>$[description]</div>]]></text>
+      </BalloonStyle>
+    </Style>
+    <Style id="icon-1899-DB4436-nodesc-highlight">
+      <IconStyle>
+        <color>ff3644db</color>
+        <scale>1</scale>
+        <Icon>
+          <href>https://www.gstatic.com/mapspro/images/stock/503-wht-blank_maps.png</href>
+        </Icon>
+        <hotSpot x="32" xunits="pixels" y="64" yunits="insetPixels"/>
+      </IconStyle>
+      <LabelStyle>
+        <scale>1</scale>
+      </LabelStyle>
+      <BalloonStyle>
+        <text><![CDATA[<h3>$[name]</h3><div>$[description]</div>]]></text>
+      </BalloonStyle>
+    </Style>
+    <StyleMap id="icon-1899-DB4436-nodesc">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#icon-1899-DB4436-nodesc-normal</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#icon-1899-DB4436-nodesc-highlight</styleUrl>
+      </Pair>
+    </StyleMap>
+    <Style id="line-1267FF-5000-nodesc-normal">
       <LineStyle>
-        <color>ffed6a25</color>
-        <width>4</width>
+        <color>ffff6712</color>
+        <width>5</width>
       </LineStyle>
     </Style>
-    ${markerStyles}
-    ${placemarks}
-    <Placemark>
-      <name>${xmlEscape(routeName)}</name>
-      <styleUrl>#routeLine</styleUrl>
-      <LineString>
-        <tessellate>1</tessellate>
-        <coordinates>${lineCoordinates}</coordinates>
-      </LineString>
-    </Placemark>
+    <Style id="line-1267FF-5000-nodesc-highlight">
+      <LineStyle>
+        <color>ffff6712</color>
+        <width>7.5</width>
+      </LineStyle>
+    </Style>
+    <StyleMap id="line-1267FF-5000-nodesc">
+      <Pair>
+        <key>normal</key>
+        <styleUrl>#line-1267FF-5000-nodesc-normal</styleUrl>
+      </Pair>
+      <Pair>
+        <key>highlight</key>
+        <styleUrl>#line-1267FF-5000-nodesc-highlight</styleUrl>
+      </Pair>
+    </StyleMap>
+    <Folder>
+      <name>${xmlEscape(directionsName)}</name>
+      <Placemark>
+        <name>${xmlEscape(directionsName)}</name>
+        <styleUrl>#line-1267FF-5000-nodesc</styleUrl>
+        <LineString>
+          <tessellate>1</tessellate>
+          <coordinates>
+            ${lineCoordinates}
+          </coordinates>
+        </LineString>
+      </Placemark>
+      ${placemarks}
+    </Folder>
   </Document>
 </kml>`;
-}
-
-function buildKmlMarkerIconHref(label, index) {
-  const normalized = String(label ?? "").trim().toUpperCase();
-
-  if (/^[A-Z]$/.test(normalized)) {
-    return `https://maps.google.com/mapfiles/kml/paddle/${normalized}.png`;
-  }
-
-  if (/^\d+$/.test(normalized)) {
-    const value = Number(normalized);
-    if (value >= 1 && value <= 10) {
-      return `https://maps.google.com/mapfiles/kml/paddle/${value}.png`;
-    }
-  }
-
-  const fallbackLetter = toAlphaLabel(index).charAt(0);
-  return `https://maps.google.com/mapfiles/kml/paddle/${fallbackLetter}.png`;
 }
 
 function downloadTextFile(filename, content, mimeType) {
