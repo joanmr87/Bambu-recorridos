@@ -1329,6 +1329,21 @@ function buildMyMapsCsv(stops, routeName) {
 }
 
 function buildMyMapsKml(stops, routeName) {
+  const markerStyles = stops
+    .map((stop, idx) => {
+      const styleId = `stopMarker${idx + 1}`;
+      const iconHref = buildKmlMarkerIconHref(stop.label, idx);
+      return `
+    <Style id="${styleId}">
+      <IconStyle>
+        <scale>1.2</scale>
+        <Icon><href>${xmlEscape(iconHref)}</href></Icon>
+      </IconStyle>
+      <LabelStyle><scale>0</scale></LabelStyle>
+    </Style>`;
+    })
+    .join("");
+
   const placemarks = stops
     .map((stop, idx) => {
       const name = xmlEscape(stop.label);
@@ -1337,6 +1352,7 @@ function buildMyMapsKml(stops, routeName) {
     <Placemark>
       <name>${name}</name>
       <description>${description}</description>
+      <styleUrl>#stopMarker${idx + 1}</styleUrl>
       <Point><coordinates>${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0</coordinates></Point>
     </Placemark>`;
     })
@@ -1356,6 +1372,7 @@ function buildMyMapsKml(stops, routeName) {
         <width>4</width>
       </LineStyle>
     </Style>
+    ${markerStyles}
     ${placemarks}
     <Placemark>
       <name>${xmlEscape(routeName)}</name>
@@ -1367,6 +1384,24 @@ function buildMyMapsKml(stops, routeName) {
     </Placemark>
   </Document>
 </kml>`;
+}
+
+function buildKmlMarkerIconHref(label, index) {
+  const normalized = String(label ?? "").trim().toUpperCase();
+
+  if (/^[A-Z]$/.test(normalized)) {
+    return `https://maps.google.com/mapfiles/kml/paddle/${normalized}.png`;
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    const value = Number(normalized);
+    if (value >= 1 && value <= 10) {
+      return `https://maps.google.com/mapfiles/kml/paddle/${value}.png`;
+    }
+  }
+
+  const fallbackLetter = toAlphaLabel(index).charAt(0);
+  return `https://maps.google.com/mapfiles/kml/paddle/${fallbackLetter}.png`;
 }
 
 function downloadTextFile(filename, content, mimeType) {
