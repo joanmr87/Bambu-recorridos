@@ -25,14 +25,25 @@
         <h2>Datos de Entrada</h2>
 
         <div class="field-group">
-          <label for="depot-lat">Depósito (Ingeniero Huergo por defecto)</label>
-          <div class="depot-grid">
-            <input id="depot-lat" type="number" step="0.000001" placeholder="-39.071500" />
-            <input id="depot-lng" type="number" step="0.000001" placeholder="-67.237900" />
+          <label for="start-point-mode">Punto de salida</label>
+          <select id="start-point-mode">
+            <option value="default">Depósito por defecto (Ingeniero Huergo)</option>
+            <option value="client">Cliente (elegir de la lista)</option>
+            <option value="manual">Coordenadas manuales</option>
+            <option value="none">Sin punto de salida fijo</option>
+          </select>
+          <div id="start-client-group" class="nested-field" hidden>
+            <label for="start-client-select">Cliente de salida</label>
+            <select id="start-client-select"></select>
           </div>
-          <small>
-            El cálculo optimiza salida y regreso desde este punto. Si lo dejás vacío, calcula solo entre clientes.
-          </small>
+          <div id="start-manual-group" class="nested-field" hidden>
+            <label for="depot-lat">Coordenadas de salida</label>
+            <div class="depot-grid">
+              <input id="depot-lat" type="number" step="0.000001" placeholder="-39.071500" />
+              <input id="depot-lng" type="number" step="0.000001" placeholder="-67.237900" />
+            </div>
+          </div>
+          <small id="start-point-help">La ruta sale desde Ingeniero Huergo. Podés cambiarlo por cliente o manual.</small>
         </div>
 
         <div class="field-group" id="client-search-block">
@@ -54,18 +65,29 @@
           <ul id="selected-clients-list" class="selected-list">
             <li class="selected-empty">Todavía no seleccionaste clientes.</li>
           </ul>
+          <small>Podés ordenar con flechas ↑ y ↓ para usar un recorrido manual.</small>
+        </div>
+
+        <div class="field-group">
+          <label for="departure-time">Hora de salida (opcional)</label>
+          <input id="departure-time" type="time" />
+          <small>Si la completás, se calcula la hora estimada de llegada en cada parada.</small>
         </div>
 
         <div class="controls">
           <label class="checkbox">
+            <input id="manual-order-mode" type="checkbox" />
+            <span>Usar orden manual de la lista (sin optimización automática)</span>
+          </label>
+          <label class="checkbox">
             <input id="return-to-depot" type="checkbox" checked />
-            <span>Volver al depósito al finalizar</span>
+            <span>Volver al punto de salida al finalizar</span>
           </label>
           <label class="checkbox">
             <input id="use-road-network" type="checkbox" checked />
             <span>Usar distancias reales de calle (OSRM)</span>
           </label>
-          <button id="optimize-btn" type="button">Calcular 3 recorridos óptimos</button>
+          <button id="optimize-btn" type="button">Calcular recorridos</button>
         </div>
 
         <div id="status" class="status" role="status" aria-live="polite"></div>
@@ -83,7 +105,7 @@
           <small>Tip: también podés hacer clic en una tarjeta para cambiar el orden mostrado.</small>
         </div>
         <div id="results-empty" class="results-empty">
-          Seleccioná clientes desde el buscador y presioná "Calcular 3 recorridos óptimos".
+          Seleccioná clientes desde el buscador y presioná "Calcular recorridos".
         </div>
         <div id="results-list" class="results-list"></div>
       </section>

@@ -78,6 +78,10 @@ body {
   color: var(--muted);
 }
 
+.nested-field {
+  margin-top: 0.55rem;
+}
+
 .depot-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -224,7 +228,7 @@ button.ghost {
   display: flex;
   justify-content: space-between;
   gap: 0.65rem;
-  align-items: center;
+  align-items: flex-start;
   padding: 0.55rem 0.65rem;
   border-bottom: 1px solid #eef2f7;
 }
@@ -243,6 +247,22 @@ button.ghost {
   color: var(--muted);
 }
 
+.selected-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.move-selected-btn {
+  background: #e0f2fe;
+  color: #0c4a6e;
+  border: 1px solid #bae6fd;
+  border-radius: 7px;
+  padding: 0.32rem 0.45rem;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
 .remove-selected-btn {
   background: #fee2e2;
   color: #991b1b;
@@ -250,6 +270,11 @@ button.ghost {
   border-radius: 7px;
   padding: 0.35rem 0.5rem;
   font-size: 0.78rem;
+}
+
+.move-selected-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .status {
@@ -346,6 +371,17 @@ button.ghost {
 
 .stops li {
   margin-bottom: 0.2rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.stop-arrival {
+  color: #0f766e;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .gmaps-block {

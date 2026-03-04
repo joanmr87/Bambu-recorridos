@@ -1,8 +1,10 @@
 const ROUTE_COLORS = ["#0ea5e9", "#f97316", "#10b981"];
 const DEFAULT_DEPOT = { lat: -39.0715, lng: -67.2379 };
+const DEFAULT_DEPOT_NAME = "Depósito (Ingeniero Huergo)";
 const MAX_GMAPS_WAYPOINTS = 8;
 const CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
 const CLIENT_CACHE_KEY = "bambu_clients_cache_v1";
+const AVG_SPEED_KMH = 28;
 
 const SHEET_SOURCES = [
   {
@@ -38,6 +40,13 @@ const state = {
 
 const depotLatInput = document.getElementById("depot-lat");
 const depotLngInput = document.getElementById("depot-lng");
+const startPointModeEl = document.getElementById("start-point-mode");
+const startClientGroupEl = document.getElementById("start-client-group");
+const startClientSelectEl = document.getElementById("start-client-select");
+const startManualGroupEl = document.getElementById("start-manual-group");
+const startPointHelpEl = document.getElementById("start-point-help");
+const departureTimeInput = document.getElementById("departure-time");
+const manualOrderModeInput = document.getElementById("manual-order-mode");
 const returnToDepotInput = document.getElementById("return-to-depot");
 const useRoadNetworkInput = document.getElementById("use-road-network");
 const optimizeBtn = document.getElementById("optimize-btn");
@@ -64,6 +73,9 @@ function init() {
   initMap();
   depotLatInput.value = String(DEFAULT_DEPOT.lat);
   depotLngInput.value = String(DEFAULT_DEPOT.lng);
+  startPointModeEl.value = "default";
+  updateStartPointControls();
+  updateOptimizeButtonLabel();
 
   optimizeBtn.addEventListener("click", async () => {
     await runOptimization();
@@ -142,11 +154,38 @@ function init() {
   });
 
   selectedClientsListEl.addEventListener("click", (event) => {
+    const moveButton = event.target.closest("[data-move-client-id]");
+    if (moveButton) {
+      const direction = Number(moveButton.dataset.moveDirection);
+      moveClientInSelection(moveButton.dataset.moveClientId, direction);
+      return;
+    }
+
     const removeButton = event.target.closest("[data-remove-client-id]");
     if (!removeButton) {
       return;
     }
     removeClientFromSelection(removeButton.dataset.removeClientId);
+  });
+
+  startPointModeEl.addEventListener("change", () => {
+    updateStartPointControls();
+    invalidateComputedRoutes();
+  });
+
+  startClientSelectEl.addEventListener("change", () => {
+    invalidateComputedRoutes();
+  });
+
+  departureTimeInput.addEventListener("change", () => {
+    if (state.run) {
+      refreshMapAndResults();
+    }
+  });
+
+  manualOrderModeInput.addEventListener("change", () => {
+    updateOptimizeButtonLabel();
+    invalidateComputedRoutes();
   });
 
   reloadSheetsBtn.addEventListener("click", async () => {
@@ -159,6 +198,7 @@ function init() {
     }
     state.selectedClients = [];
     renderSelectedClients();
+    populateStartClientSelect();
     invalidateComputedRoutes();
     setStatus("Selección limpiada.", "ok");
   });
@@ -176,6 +216,7 @@ function init() {
   }
 
   renderSelectedClients();
+  populateStartClientSelect();
   setStatus("Sincronizando clientes desde Google Sheets...", "ok");
   loadClientsFromSheets(false);
 }
@@ -240,6 +281,9 @@ function setSheetsLoading(isLoading) {
   state.loadingSheets = isLoading;
   reloadSheetsBtn.disabled = isLoading;
   clientSearchInput.disabled = isLoading;
+  if (startPointModeEl.value === "client") {
+    startClientSelectEl.disabled = isLoading || state.availableClients.length === 0;
+  }
 }
 
 function applyAvailableClients(clients) {
@@ -247,6 +291,7 @@ function applyAvailableClients(clients) {
   const selectedKeys = new Set(state.selectedClients.map((client) => client.key));
   state.selectedClients = clients.filter((client) => selectedKeys.has(client.key));
   renderSelectedClients();
+  populateStartClientSelect();
   updateSuggestions(clientSearchInput.value);
 }
 
@@ -556,6 +601,7 @@ function addClientToSelection(clientId) {
 
   state.selectedClients.push(client);
   renderSelectedClients();
+  populateStartClientSelect();
 
   clientSearchInput.value = "";
   state.filteredSuggestions = [];
@@ -573,8 +619,34 @@ function removeClientFromSelection(clientKey) {
   }
 
   renderSelectedClients();
+  populateStartClientSelect();
   invalidateComputedRoutes();
   setStatus("Cliente removido de la selección.", "ok");
+}
+
+function moveClientInSelection(clientKey, direction) {
+  if (!Number.isInteger(direction) || direction === 0) {
+    return;
+  }
+
+  const currentIndex = state.selectedClients.findIndex((client) => client.key === clientKey);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  const nextIndex = currentIndex + direction;
+  if (nextIndex < 0 || nextIndex >= state.selectedClients.length) {
+    return;
+  }
+
+  const reordered = [...state.selectedClients];
+  [reordered[currentIndex], reordered[nextIndex]] = [reordered[nextIndex], reordered[currentIndex]];
+  state.selectedClients = reordered;
+
+  renderSelectedClients();
+  populateStartClientSelect();
+  invalidateComputedRoutes();
+  setStatus("Orden manual actualizado.", "ok");
 }
 
 function renderSelectedClients() {
@@ -587,17 +659,117 @@ function renderSelectedClients() {
 
   selectedClientsListEl.innerHTML = state.selectedClients
     .map(
-      (client) => `
+      (client, idx) => `
       <li class="selected-item">
         <div>
-          <div class="selected-main">${escapeHtml(client.name)}</div>
+          <div class="selected-main">${idx + 1}. ${escapeHtml(client.name)}</div>
           <div class="selected-sub">${escapeHtml(client.city || "Sin ciudad")}</div>
         </div>
-        <button type="button" class="remove-selected-btn" data-remove-client-id="${escapeHtmlAttr(client.key)}">Quitar</button>
+        <div class="selected-actions">
+          <button
+            type="button"
+            class="move-selected-btn"
+            data-move-client-id="${escapeHtmlAttr(client.key)}"
+            data-move-direction="-1"
+            ${idx === 0 ? "disabled" : ""}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            class="move-selected-btn"
+            data-move-client-id="${escapeHtmlAttr(client.key)}"
+            data-move-direction="1"
+            ${idx === state.selectedClients.length - 1 ? "disabled" : ""}
+          >
+            ↓
+          </button>
+          <button type="button" class="remove-selected-btn" data-remove-client-id="${escapeHtmlAttr(client.key)}">Quitar</button>
+        </div>
       </li>
     `,
     )
     .join("");
+}
+
+function populateStartClientSelect() {
+  const previousValue = startClientSelectEl.value;
+  const ordered = [];
+  const seen = new Set();
+
+  state.selectedClients.forEach((client) => {
+    if (seen.has(client.id)) {
+      return;
+    }
+    ordered.push(client);
+    seen.add(client.id);
+  });
+
+  state.availableClients.forEach((client) => {
+    if (seen.has(client.id)) {
+      return;
+    }
+    ordered.push(client);
+    seen.add(client.id);
+  });
+
+  if (ordered.length === 0) {
+    startClientSelectEl.innerHTML = '<option value="">No hay clientes cargados</option>';
+    startClientSelectEl.disabled = true;
+    updateStartPointControls();
+    return;
+  }
+
+  startClientSelectEl.disabled = false;
+  startClientSelectEl.innerHTML = ordered
+    .map((client) => {
+      const city = client.city ? ` - ${client.city}` : "";
+      return `<option value="${escapeHtmlAttr(client.id)}">${escapeHtml(client.name)}${escapeHtml(city)}</option>`;
+    })
+    .join("");
+
+  const selectedStillExists = ordered.some((client) => client.id === previousValue);
+  startClientSelectEl.value = selectedStillExists ? previousValue : ordered[0].id;
+  updateStartPointControls();
+}
+
+function updateStartPointControls() {
+  const mode = startPointModeEl.value;
+  startClientGroupEl.hidden = mode !== "client";
+  startManualGroupEl.hidden = mode !== "manual";
+
+  if (mode === "none") {
+    returnToDepotInput.checked = false;
+    returnToDepotInput.disabled = true;
+    startPointHelpEl.textContent = "La ruta se calcula solamente entre clientes seleccionados.";
+    return;
+  }
+
+  returnToDepotInput.disabled = false;
+
+  if (mode === "default") {
+    startPointHelpEl.textContent = "Salida y regreso desde Ingeniero Huergo.";
+    return;
+  }
+
+  if (mode === "client") {
+    if (startClientSelectEl.disabled || !startClientSelectEl.value) {
+      startPointHelpEl.textContent = "Primero cargá clientes para poder elegir salida desde cliente.";
+    } else {
+      const client = state.availableClients.find((item) => item.id === startClientSelectEl.value);
+      const clientName = client ? client.name : "cliente seleccionado";
+      startPointHelpEl.textContent = `La ruta saldrá desde: ${clientName}.`;
+    }
+    return;
+  }
+
+  startPointHelpEl.textContent = "Definí latitud/longitud manual para salida y opcional regreso.";
+}
+
+function updateOptimizeButtonLabel() {
+  optimizeBtn.textContent = manualOrderModeInput.checked
+    ? "Generar recorrido manual"
+    : "Calcular 3 recorridos óptimos";
 }
 
 function invalidateComputedRoutes() {
@@ -612,18 +784,28 @@ async function runOptimization() {
   clearResults();
 
   const clients = [...state.selectedClients];
-  if (clients.length < 2) {
+  const manualOrderMode = Boolean(manualOrderModeInput.checked);
+  if (!manualOrderMode && clients.length < 2) {
     setStatus("Seleccioná al menos 2 clientes desde el buscador para optimizar recorridos.", "warn");
     return;
   }
+  if (manualOrderMode && clients.length < 1) {
+    setStatus("Seleccioná al menos 1 cliente para armar un recorrido manual.", "warn");
+    return;
+  }
 
-  const depot = parseDepot(depotLatInput.value, depotLngInput.value);
+  const depot = resolveStartPoint();
+  if (!depot && startPointModeEl.value !== "none") {
+    setStatus("Revisá el punto de salida seleccionado antes de calcular.", "warn");
+    return;
+  }
   const returnToDepot = Boolean(returnToDepotInput.checked && depot);
   const useRoadNetwork = Boolean(useRoadNetworkInput.checked);
+  const departureMinutes = parseTimeToMinutes(departureTimeInput.value);
 
   setStatus("Calculando rutas...", "ok");
   const distanceModel = await buildDistanceModel(clients, depot, returnToDepot, useRoadNetwork);
-  const rankedRoutes = buildTopRoutes(distanceModel, 3);
+  const rankedRoutes = manualOrderMode ? buildManualRoute(distanceModel) : buildTopRoutes(distanceModel, 3);
 
   if (rankedRoutes.length === 0) {
     setStatus("No se pudieron generar rutas. Revisá los datos de entrada.", "warn");
@@ -635,21 +817,47 @@ async function runOptimization() {
     rankedRoutes,
     depot,
     returnToDepot,
+    distanceModel,
+    departureMinutes,
+    manualOrderMode,
   };
   state.selectedRouteIndex = 0;
 
   updateRouteSelector(rankedRoutes.length, state.selectedRouteIndex);
   refreshMapAndResults();
 
-  const depotLabel = depot ? "con depósito" : "sin depósito";
+  const depotLabel = depot ? `salida desde ${depot.name}` : "sin punto de salida fijo";
   const distanceModeLabel = distanceModel.source === "road" ? "distancia vial real" : "distancia en línea recta";
+  const optimizationLabel = manualOrderMode ? "orden manual" : `${rankedRoutes.length} rutas óptimas`;
   setStatus(
-    `Listo: ${rankedRoutes.length} rutas generadas (${clients.length} clientes, ${depotLabel}, ${distanceModeLabel}).`,
+    `Listo: ${optimizationLabel} (${clients.length} clientes, ${depotLabel}, ${distanceModeLabel}).`,
     "ok",
   );
 }
 
-function parseDepot(latRaw, lngRaw) {
+function resolveStartPoint() {
+  const mode = startPointModeEl.value;
+  if (mode === "none") {
+    return null;
+  }
+
+  if (mode === "default") {
+    return { ...DEFAULT_DEPOT, name: DEFAULT_DEPOT_NAME };
+  }
+
+  if (mode === "client") {
+    const clientId = startClientSelectEl.value;
+    const client = state.availableClients.find((item) => item.id === clientId);
+    if (!client) {
+      return null;
+    }
+    return { lat: client.lat, lng: client.lng, name: `Cliente: ${client.name}` };
+  }
+
+  return parseDepot(depotLatInput.value, depotLngInput.value, "Punto manual");
+}
+
+function parseDepot(latRaw, lngRaw, name = "Punto de salida") {
   const lat = Number(latRaw);
   const lng = Number(lngRaw);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -658,7 +866,40 @@ function parseDepot(latRaw, lngRaw) {
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
     return null;
   }
-  return { lat, lng, name: "Depósito" };
+  return { lat, lng, name };
+}
+
+function parseTimeToMinutes(raw) {
+  if (!raw) {
+    return null;
+  }
+
+  const match = /^(\d{1,2}):(\d{2})$/.exec(raw);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
+    return null;
+  }
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+function buildManualRoute(model) {
+  const order = Array.from({ length: model.matrix.length }, (_, idx) => idx);
+  return [
+    {
+      order,
+      distanceKm: routeDistance(order, model),
+      isManual: true,
+    },
+  ];
 }
 
 async function buildDistanceModel(clients, depot, returnToDepot, useRoadNetwork) {
@@ -938,23 +1179,45 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
     card.style.borderLeftColor = ROUTE_COLORS[idx % ROUTE_COLORS.length];
 
     const etaMinutes = estimateMinutes(route.distanceKm);
-    const routeStops = formatRouteStops(route.order, clients);
+    const timing = buildRouteTiming(route, state.run?.distanceModel, state.run?.departureMinutes);
+    const routeStops = formatRouteStops(route.order, clients, timing.arrivalByClientIndex);
     const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
     const driverModeUrl = buildDriverModeUrl(route, idx, clients);
-    const title = idx === 0 ? "Recorrido #1 (Más óptimo)" : `Recorrido #${idx + 1}`;
+    const title = route.isManual
+      ? "Recorrido manual (orden definido)"
+      : idx === 0
+        ? "Recorrido #1 (Más óptimo)"
+        : `Recorrido #${idx + 1}`;
     const distanceLabel = depot
-      ? "Distancia total (incluye viaje desde/hacia Ingeniero Huergo):"
+      ? `Distancia total (desde ${depot.name}${returnToDepot ? " y regreso" : ""}):`
       : "Distancia total:";
+    const departureMetric = timing.departureLabel
+      ? `<span><b>Salida:</b> ${escapeHtml(timing.departureLabel)}</span>`
+      : "";
+    const finishMetric = timing.finishLabel
+      ? `<span><b>Fin estimado:</b> ${escapeHtml(timing.finishLabel)}</span>`
+      : "";
 
     card.innerHTML = `
       <h3><span class="swatch" style="background:${ROUTE_COLORS[idx % ROUTE_COLORS.length]}"></span>${title}</h3>
       <div class="metrics">
-        <span><b>${distanceLabel}</b> ${route.distanceKm.toFixed(2)} km</span>
+        <span><b>${escapeHtml(distanceLabel)}</b> ${route.distanceKm.toFixed(2)} km</span>
         <span><b>Tiempo estimado:</b> ${etaMinutes} min</span>
         <span><b>Paradas:</b> ${route.order.length}</span>
+        ${departureMetric}
+        ${finishMetric}
       </div>
       <ol class="stops">
-        ${routeStops.map((stop) => `<li>${escapeHtml(stop)}</li>`).join("")}
+        ${routeStops
+          .map(
+            (stop) => `
+          <li>
+            <span>${escapeHtml(stop.name)}</span>
+            ${stop.arrivalLabel ? `<span class="stop-arrival">${escapeHtml(stop.arrivalLabel)}</span>` : ""}
+          </li>
+        `,
+          )
+          .join("")}
       </ol>
       <div class="gmaps-block">
         <div class="gmaps-title">Navegación para repartidor</div>
@@ -985,16 +1248,69 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
   });
 }
 
-function formatRouteStops(order, clients) {
-  return order.map((clientIndex, idx) => {
+function formatRouteStops(order, clients, arrivalByClientIndex) {
+  return order.map((clientIndex) => {
     const client = clients[clientIndex];
-    return `${idx + 1}. ${client.name}`;
+    return {
+      name: client.name,
+      arrivalLabel: arrivalByClientIndex?.get(clientIndex) || null,
+    };
   });
 }
 
 function estimateMinutes(distanceKm) {
-  const avgSpeedKmH = 28;
-  return Math.round((distanceKm / avgSpeedKmH) * 60);
+  return Math.round(distanceToMinutes(distanceKm));
+}
+
+function distanceToMinutes(distanceKm) {
+  return (distanceKm / AVG_SPEED_KMH) * 60;
+}
+
+function buildRouteTiming(route, model, departureMinutes) {
+  const result = {
+    arrivalByClientIndex: new Map(),
+    departureLabel: null,
+    finishLabel: null,
+  };
+
+  if (!model || !Number.isFinite(departureMinutes) || !Array.isArray(route.order) || route.order.length === 0) {
+    return result;
+  }
+
+  result.departureLabel = formatClockTime(departureMinutes);
+
+  let cumulative = 0;
+  if (model.depotDistances && route.order.length > 0) {
+    cumulative += distanceToMinutes(model.depotDistances[route.order[0]] || 0);
+  }
+
+  route.order.forEach((clientIndex, idx) => {
+    result.arrivalByClientIndex.set(clientIndex, formatClockTime(departureMinutes + cumulative));
+    if (idx < route.order.length - 1) {
+      const nextClientIndex = route.order[idx + 1];
+      cumulative += distanceToMinutes(model.matrix[clientIndex][nextClientIndex] || 0);
+    }
+  });
+
+  if (model.depotDistances && model.returnToDepot && route.order.length > 0) {
+    cumulative += distanceToMinutes(model.depotDistances[route.order[route.order.length - 1]] || 0);
+  }
+
+  result.finishLabel = formatClockTime(departureMinutes + cumulative);
+  return result;
+}
+
+function formatClockTime(totalMinutes) {
+  const rounded = Math.round(totalMinutes);
+  const dayOffset = Math.floor(rounded / (24 * 60));
+  const dayMinutes = ((rounded % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours = Math.floor(dayMinutes / 60);
+  const minutes = dayMinutes % 60;
+  const base = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  if (dayOffset <= 0) {
+    return base;
+  }
+  return `${base} (+${dayOffset}d)`;
 }
 
 function fitMapToPoints(clients) {
@@ -1179,6 +1495,9 @@ function activateDriverMode(sharedRoute) {
     rankedRoutes,
     depot: null,
     returnToDepot: false,
+    distanceModel: null,
+    departureMinutes: null,
+    manualOrderMode: false,
   };
   state.selectedRouteIndex = 0;
 
@@ -1282,7 +1601,7 @@ function buildRouteStopsForExport(route, clients, depot, returnToDepot) {
   if (depot) {
     stops.push({
       label: toAlphaLabel(stops.length),
-      name: "Depósito (inicio)",
+      name: `${depot.name} (inicio)`,
       lat: depot.lat,
       lng: depot.lng,
     });
@@ -1301,7 +1620,7 @@ function buildRouteStopsForExport(route, clients, depot, returnToDepot) {
   if (depot && returnToDepot) {
     stops.push({
       label: toAlphaLabel(stops.length),
-      name: "Depósito (regreso)",
+      name: `${depot.name} (regreso)`,
       lat: depot.lat,
       lng: depot.lng,
     });
@@ -1465,16 +1784,17 @@ async function copyTextToClipboard(text, successMessage) {
 
 function updateRouteSelector(routeCount, selectedIndex) {
   routeSelectorEl.innerHTML = "";
+  const routes = state.run?.rankedRoutes || [];
 
   for (let idx = 0; idx < routeCount; idx += 1) {
     const option = document.createElement("option");
     option.value = String(idx);
-    option.textContent = `Recorrido #${idx + 1}`;
+    option.textContent = routes[idx]?.isManual ? "Recorrido manual" : `Recorrido #${idx + 1}`;
     routeSelectorEl.appendChild(option);
   }
 
   routeSelectorEl.value = String(selectedIndex);
-  routeViewControlsEl.hidden = routeCount === 0;
+  routeViewControlsEl.hidden = routeCount <= 1;
 }
 
 function selectRoute(index) {
