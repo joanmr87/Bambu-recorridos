@@ -5,6 +5,7 @@ const MAX_GMAPS_WAYPOINTS = 8;
 const CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
 const CLIENT_CACHE_KEY = "bambu_clients_cache_v1";
 const AVG_SPEED_KMH = 28;
+const SERVICE_MINUTES_PER_STOP = 15;
 
 const SHEET_SOURCES = [
   {
@@ -1314,7 +1315,7 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
     card.dataset.routeIndex = String(idx);
     card.style.borderLeftColor = ROUTE_COLORS[idx % ROUTE_COLORS.length];
 
-    const etaMinutes = estimateMinutes(route.distanceKm);
+    const etaMinutes = estimateMinutes(route.distanceKm, route.order.length);
     const timing = buildRouteTiming(route, state.run?.distanceModel, state.run?.departureMinutes);
     const routeStops = formatRouteStops(route.order, clients, timing.arrivalByClientIndex);
     const googleMapsLinks = createGoogleMapsLinks(route.order, clients, depot, returnToDepot);
@@ -1344,6 +1345,7 @@ function renderResults(clients, rankedRoutes, depot, returnToDepot) {
         ${departureMetric}
         ${finishMetric}
       </div>
+      <div class="metrics-note">Incluye ${SERVICE_MINUTES_PER_STOP} min por parada de descarga.</div>
       <ol class="stops">
         ${routeStops
           .map(
@@ -1483,12 +1485,17 @@ function restoreSuggestedOrder() {
   setStatus("Se restauró el orden sugerido por el algoritmo.", "ok");
 }
 
-function estimateMinutes(distanceKm) {
-  return Math.round(distanceToMinutes(distanceKm));
+function estimateMinutes(distanceKm, stopCount = 0) {
+  return Math.round(distanceToMinutes(distanceKm) + serviceStopMinutes(stopCount));
 }
 
 function distanceToMinutes(distanceKm) {
   return (distanceKm / AVG_SPEED_KMH) * 60;
+}
+
+function serviceStopMinutes(stopCount) {
+  const safeStopCount = Number.isFinite(stopCount) ? Math.max(0, stopCount) : 0;
+  return safeStopCount * SERVICE_MINUTES_PER_STOP;
 }
 
 function buildRouteTiming(route, model, departureMinutes) {
@@ -1511,6 +1518,7 @@ function buildRouteTiming(route, model, departureMinutes) {
 
   route.order.forEach((clientIndex, idx) => {
     result.arrivalByClientIndex.set(clientIndex, formatClockTime(departureMinutes + cumulative));
+    cumulative += SERVICE_MINUTES_PER_STOP;
     if (idx < route.order.length - 1) {
       const nextClientIndex = route.order[idx + 1];
       cumulative += distanceToMinutes(model.matrix[clientIndex][nextClientIndex] || 0);

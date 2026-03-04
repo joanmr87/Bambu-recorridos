@@ -454,6 +454,13 @@ button.ghost {
   margin-bottom: 0.5rem;
 }
 
+.metrics-note {
+  margin-top: -0.25rem;
+  margin-bottom: 0.45rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
 .stops {
   margin: 0;
   padding-left: 1.1rem;
