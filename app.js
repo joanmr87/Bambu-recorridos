@@ -79,6 +79,7 @@ function init() {
   depotLatInput.value = String(DEFAULT_DEPOT.lat);
   depotLngInput.value = String(DEFAULT_DEPOT.lng);
   startPointModeEl.value = "default";
+  manualOrderModeInput.checked = false;
   updateStartPointControls();
   updateOptimizeButtonLabel();
   initRouteEditor();
@@ -801,7 +802,7 @@ function updateStartPointControls() {
 
 function updateOptimizeButtonLabel() {
   optimizeBtn.textContent = manualOrderModeInput.checked
-    ? "Generar recorrido manual"
+    ? "Generar 1 ruta manual"
     : "Calcular 3 recorridos óptimos";
 }
 
@@ -867,7 +868,7 @@ async function runOptimization() {
 
   const depotLabel = depot ? `salida desde ${depot.name}` : "sin punto de salida fijo";
   const distanceModeLabel = distanceModel.source === "road" ? "distancia vial real" : "distancia en línea recta";
-  const optimizationLabel = manualOrderMode ? "orden manual" : `${rankedRoutes.length} rutas óptimas`;
+  const optimizationLabel = manualOrderMode ? "1 ruta manual" : `${rankedRoutes.length} rutas óptimas`;
   setStatus(
     `Listo: ${optimizationLabel} (${clients.length} clientes, ${depotLabel}, ${distanceModeLabel}).`,
     "ok",
