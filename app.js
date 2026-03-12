@@ -35,6 +35,7 @@ const state = {
   availableClients: [],
   selectedClients: [],
   filteredSuggestions: [],
+  activeSuggestionIndex: -1,
   loadingSheets: false,
   run: null,
   selectedRouteIndex: 0,
@@ -145,14 +146,29 @@ function init() {
   });
 
   clientSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveActiveSuggestion(1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActiveSuggestion(-1);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      hideSuggestions();
+      return;
+    }
+
     if (event.key !== "Enter") {
       return;
     }
+
     event.preventDefault();
-    if (state.filteredSuggestions.length === 0) {
-      return;
-    }
-    addClientToSelection(state.filteredSuggestions[0].id);
+    selectActiveSuggestion();
   });
 
   clientSuggestionsEl.addEventListener("click", (event) => {
@@ -648,6 +664,7 @@ function updateSuggestions(queryRaw) {
   const query = normalizeText(queryRaw);
   if (!query) {
     state.filteredSuggestions = [];
+    state.activeSuggestionIndex = -1;
     hideSuggestions();
     return;
   }
@@ -662,6 +679,8 @@ function updateSuggestions(queryRaw) {
     })
     .slice(0, 12);
 
+  state.activeSuggestionIndex = state.filteredSuggestions.length > 0 ? 0 : -1;
+
   renderSuggestions(queryRaw);
 }
 
@@ -672,6 +691,7 @@ function renderSuggestions(queryRaw) {
   }
 
   if (state.filteredSuggestions.length === 0) {
+    state.activeSuggestionIndex = -1;
     clientSuggestionsEl.innerHTML = '<div class="suggestion-empty">Sin resultados para esa búsqueda.</div>';
     clientSuggestionsEl.hidden = false;
     return;
@@ -679,8 +699,13 @@ function renderSuggestions(queryRaw) {
 
   clientSuggestionsEl.innerHTML = state.filteredSuggestions
     .map(
-      (client) => `
-      <button type="button" class="suggestion-item" data-client-id="${client.id}">
+      (client, idx) => `
+      <button
+        type="button"
+        class="suggestion-item ${idx === state.activeSuggestionIndex ? "is-active" : ""}"
+        data-client-id="${client.id}"
+        data-suggestion-index="${idx}"
+      >
         <span class="suggestion-main">${escapeHtml(client.name)}</span>
         <span class="suggestion-sub">${escapeHtml(client.city || "Sin ciudad")}</span>
       </button>
@@ -693,6 +718,56 @@ function renderSuggestions(queryRaw) {
 
 function hideSuggestions() {
   clientSuggestionsEl.hidden = true;
+  state.activeSuggestionIndex = -1;
+}
+
+function moveActiveSuggestion(direction) {
+  if (state.filteredSuggestions.length === 0) {
+    return;
+  }
+
+  if (clientSuggestionsEl.hidden) {
+    renderSuggestions(clientSearchInput.value);
+    return;
+  }
+
+  const maxIndex = state.filteredSuggestions.length - 1;
+  const currentIndex = state.activeSuggestionIndex < 0 ? 0 : state.activeSuggestionIndex;
+  const nextIndex = Math.min(maxIndex, Math.max(0, currentIndex + direction));
+  setActiveSuggestionIndex(nextIndex);
+}
+
+function setActiveSuggestionIndex(index) {
+  if (index < 0 || index >= state.filteredSuggestions.length) {
+    return;
+  }
+
+  state.activeSuggestionIndex = index;
+
+  const items = clientSuggestionsEl.querySelectorAll("[data-suggestion-index]");
+  items.forEach((item) => {
+    const itemIndex = Number(item.dataset.suggestionIndex);
+    item.classList.toggle("is-active", itemIndex === index);
+  });
+
+  const activeItem = clientSuggestionsEl.querySelector(`[data-suggestion-index="${index}"]`);
+  if (activeItem) {
+    activeItem.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function selectActiveSuggestion() {
+  if (state.filteredSuggestions.length === 0) {
+    return;
+  }
+
+  const suggestion =
+    state.filteredSuggestions[state.activeSuggestionIndex >= 0 ? state.activeSuggestionIndex : 0];
+  if (!suggestion) {
+    return;
+  }
+
+  addClientToSelection(suggestion.id);
 }
 
 function addClientToSelection(clientId) {
@@ -712,6 +787,7 @@ function addClientToSelection(clientId) {
 
   clientSearchInput.value = "";
   state.filteredSuggestions = [];
+  state.activeSuggestionIndex = -1;
   hideSuggestions();
 
   invalidateComputedRoutes();
