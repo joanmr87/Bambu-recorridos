@@ -97,7 +97,7 @@ function init() {
     selectRoute(index);
   });
 
-  resultsListEl.addEventListener("click", (event) => {
+  resultsListEl.addEventListener("click", async (event) => {
     const copyMapsButton = event.target.closest("[data-copy-maps-route-index]");
     if (copyMapsButton) {
       event.preventDefault();
@@ -118,7 +118,7 @@ function init() {
     if (exportButton) {
       event.preventDefault();
       event.stopPropagation();
-      exportRouteForMyMaps(
+      await exportRouteForMyMaps(
         Number(exportButton.dataset.exportRouteIndex),
         exportButton.dataset.exportFormat || "csv",
       );
@@ -1881,7 +1881,7 @@ async function copyGoogleMapsRoute(routeIndex) {
   await copyTextToClipboard(message, `Se copiaron ${links.length} tramos de Google Maps en orden.`);
 }
 
-function exportRouteForMyMaps(routeIndex, format) {
+async function exportRouteForMyMaps(routeIndex, format) {
   if (!state.run) {
     return;
   }
@@ -1908,9 +1908,27 @@ function exportRouteForMyMaps(routeIndex, format) {
     return;
   }
 
-  const kmlContent = buildMyMapsKml(stops, routeName);
+  let routeCoordinates = buildStraightLineCoordinates(stops);
+  let usedRoadGeometry = false;
+
+  try {
+    const roadCoordinates = await fetchRouteGeometryForExport(stops);
+    if (roadCoordinates.length >= 2) {
+      routeCoordinates = roadCoordinates;
+      usedRoadGeometry = true;
+    }
+  } catch (error) {
+    console.warn("No se pudo obtener la geometria vial para el KML, se exportara linea simple:", error);
+  }
+
+  const kmlContent = buildMyMapsKml(stops, routeName, routeCoordinates);
   downloadTextFile(`${fileBase}.kml`, kmlContent, "application/vnd.google-earth.kml+xml;charset=utf-8;");
-  setStatus("KML para Google My Maps descargado.", "ok");
+  setStatus(
+    usedRoadGeometry
+      ? "KML para Google My Maps descargado con recorrido sobre calles."
+      : "KML descargado. No se pudo obtener la traza vial y se exporto una linea simple.",
+    usedRoadGeometry ? "ok" : "warn",
+  );
 }
 
 function buildRouteStopsForExport(route, clients, depot, returnToDepot) {
@@ -1965,7 +1983,7 @@ function buildMyMapsCsv(stops, routeName) {
   return [header, ...rows].join("\n");
 }
 
-function buildMyMapsKml(stops, routeName) {
+function buildMyMapsKml(stops, routeName, routeCoordinates = buildStraightLineCoordinates(stops)) {
   const firstStop = stops[0];
   const lastStop = stops[stops.length - 1];
   const directionsName = `Indicaciones de ${firstStop.name} a ${lastStop.name}`;
@@ -1985,7 +2003,9 @@ function buildMyMapsKml(stops, routeName) {
     )
     .join("");
 
-  const lineCoordinates = stops.map((stop) => `${stop.lng.toFixed(6)},${stop.lat.toFixed(6)},0`).join("\n            ");
+  const lineCoordinates = routeCoordinates
+    .map((point) => `${Number(point.lng).toFixed(6)},${Number(point.lat).toFixed(6)},0`)
+    .join("\n            ");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -2072,6 +2092,53 @@ function buildMyMapsKml(stops, routeName) {
     </Folder>
   </Document>
 </kml>`;
+}
+
+function buildStraightLineCoordinates(stops) {
+  return stops.map((stop) => ({
+    lat: stop.lat,
+    lng: stop.lng,
+  }));
+}
+
+async function fetchRouteGeometryForExport(stops) {
+  if (!Array.isArray(stops) || stops.length < 2) {
+    return buildStraightLineCoordinates(stops || []);
+  }
+
+  const coordinates = stops.map((stop) => `${stop.lng},${stop.lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=false`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`OSRM respondio ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const geometry = payload?.routes?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(geometry) || geometry.length < 2) {
+      throw new Error("OSRM no devolvio una geometria valida.");
+    }
+
+    return geometry
+      .map((point) => {
+        if (!Array.isArray(point) || point.length < 2) {
+          return null;
+        }
+
+        return {
+          lng: Number(point[0]),
+          lat: Number(point[1]),
+        };
+      })
+      .filter((point) => point && Number.isFinite(point.lat) && Number.isFinite(point.lng));
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function downloadTextFile(filename, content, mimeType) {
